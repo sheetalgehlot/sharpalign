@@ -1,0 +1,11 @@
+[build]
+  command = "python3 build.py"
+  publish = "dist"
+
+[functions]
+  included_files = ["private-pdfs/**"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200

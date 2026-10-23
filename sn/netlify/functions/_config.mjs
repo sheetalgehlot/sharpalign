@@ -1,0 +1,1 @@
+export default {"owner_email": "you@sharpalign.com", "from_name": "Sharpalign", "ref_commission_pct": 10, "friend_discount_pct": 5, "credit_max_pct": 50, "hold_days": 7, "link_days": 30, "max_downloads": 10};

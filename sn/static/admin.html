@@ -1,0 +1,18 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Sharpalign admin</title>
+<style>
+:root{color-scheme:light dark;--bg:#f3f5fb;--sf:#fff;--ink:#14213d;--mu:#55607a;--ln:#d5dbe7;--ac:#3b5bdb}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1424;--sf:#182038;--ink:#eef1f8;--mu:#a4aec6;--ln:#2b3754;--ac:#7c96ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif;padding:0 14px 60px}
+main{max-width:720px;margin:0 auto}h1{font-size:24px;margin:16px 0 8px}h2{font-size:19px;margin:0 0 8px}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}nav button{background:var(--sf);color:var(--ink);border:1.5px solid var(--ln);border-radius:99px;padding:7px 14px}nav button.on{background:var(--ink);color:var(--bg)}
+.box{background:var(--sf);border:1px solid var(--ln);border-radius:10px;padding:14px;margin:10px 0}
+input,select,textarea{width:100%;padding:10px;border:1.5px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;margin:4px 0 10px}
+input[type=color]{height:42px;padding:2px}button{font:inherit;cursor:pointer;background:var(--ac);color:#fff;border:0;border-radius:8px;padding:8px 14px}
+button.g{background:transparent;color:var(--ink);border:1.5px solid var(--ln)}button.r{background:#c62828}
+label{font-size:14px;color:var(--mu);display:block}small,.mu{color:var(--mu)}.warn{background:#fff3cd;color:#4a3b00;border-radius:10px;padding:12px;margin:10px 0}
+.chip{display:inline-block;font-size:12px;border-radius:99px;padding:1px 9px;margin-right:4px;background:var(--ln)}.ok{background:#c8f0d2;color:#0b4a1d}.no{background:#ffd9d9;color:#7a1010}
+</style></head><body><main>
+<h1>Sharpalign admin</h1>
+<nav id="nav" hidden><button data-t="orders">Orders</button><button data-t="products">Products</button><button data-t="reviews">Reviews</button><button data-t="credit">Credit</button><button id="lo" class="g">Log out</button></nav>
+<div id="bn"></div><div id="app"><p>Loading…</p></div></main>
+<script src="/assets/admin.js"></script></body></html>
