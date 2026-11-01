@@ -3,7 +3,7 @@ import {getStore} from '@netlify/blobs';
 import CFG from './_config.mjs';
 import P from './_products.mjs';
 export {CFG,P};
-export const env=k=>Netlify.env.get(k)||'';
+export const env=k=>String(Netlify.env.get(k)||'').trim().replace(/^["']+|["']+$/g,'').trim();
 export const store=()=>getStore('sharpalign');
 export const json=(o,s=200)=>new Response(JSON.stringify(o),{status:s,headers:{'content-type':'application/json','cache-control':'no-store'}});
 const sec=()=>{const s=env('TOKEN_SECRET');if(s.length<16)throw new Error('Set TOKEN_SECRET (long random text) in Netlify');return s;};
@@ -95,4 +95,4 @@ export async function fulfil(oid,origin){
 // ---- admin ----
 export const mkAdmin=()=>{const p=Buffer.from(JSON.stringify({a:1,x:Date.now()+432e5})).toString('base64url');return p+'.'+hmac(sec(),'adm'+p).slice(0,32);};
 export const isAdmin=req=>{try{const c=(req.headers.get('cookie')||'').match(/(?:^|; )adm=([^;]+)/);if(!c)return false;const [p,m]=c[1].split('.');return safe(hmac(sec(),'adm'+p).slice(0,32),m)&&JSON.parse(Buffer.from(p,'base64url').toString()).x>Date.now();}catch{return false;}};
-export const passOk=p=>{const a=env('ADMIN_PASSWORD');return a.length>=8&&safe(hmac('pw',String(p)),hmac('pw',a));};
+export const passOk=p=>{const a=env('ADMIN_PASSWORD');return a.length>=8&&safe(hmac('pw',String(p).trim()),hmac('pw',a));};

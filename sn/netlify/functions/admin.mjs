@@ -5,7 +5,10 @@ export default async req=>{
  const g=async(k,d)=>(await s.get(k,{type:'json'}))||d,mark=()=>s.setJSON('adm/dirty',{v:true});
  const all=async p=>{const o=[];for(const b of (await s.list({prefix:p})).blobs.slice(0,300))o.push([b.key,await g(b.key,null)]);return o;};
  const ck=(v)=>new Response('{"ok":true}',{headers:{'content-type':'application/json','set-cookie':'adm='+v+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+(v?43200:0)}});
- if(a==='login'&&req.method==='POST'){const b=await req.json().catch(()=>({}));if(!passOk(b.password)){await new Promise(r=>setTimeout(r,1500));return json({error:'Wrong password'},401);}return ck(mkAdmin());}
+ if(a==='health')return json({admin_password:env('ADMIN_PASSWORD').length>=8,token_secret:env('TOKEN_SECRET').length>=16,razorpay_keys:!!env('RAZORPAY_KEY_ID')&&!!env('RAZORPAY_KEY_SECRET'),razorpay_webhook_secret:!!env('RAZORPAY_WEBHOOK_SECRET'),email:!!env('BREVO_API_KEY')&&!!env('FROM_EMAIL'),export_key:env('EXPORT_KEY').length>=16,build_hook:!!env('BUILD_HOOK_URL')});
+ if(a==='login'&&req.method==='POST'){const b=await req.json().catch(()=>({}));
+  if(env('ADMIN_PASSWORD').length<8)return json({error:'The server cannot see ADMIN_PASSWORD (missing or under 8 characters). Check it in Netlify, then deploy again.'},500);
+  if(env('TOKEN_SECRET').length<16)return json({error:'The server cannot see TOKEN_SECRET (missing or under 16 characters). Check it in Netlify, then deploy again.'},500);if(!passOk(b.password)){await new Promise(r=>setTimeout(r,1500));return json({error:'Wrong password'},401);}return ck(mkAdmin());}
  if(a==='logout')return ck('');
  if(!isAdmin(req))return json({error:'login'},401);
  if(req.method!=='GET'&&req.headers.get('x-admin')!=='1')return json({error:'bad request'},400);
