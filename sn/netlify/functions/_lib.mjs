@@ -95,4 +95,4 @@ export async function fulfil(oid,origin){
 // ---- admin ----
 export const mkAdmin=()=>{const p=Buffer.from(JSON.stringify({a:1,x:Date.now()+432e5})).toString('base64url');return p+'.'+hmac(sec(),'adm'+p).slice(0,32);};
 export const isAdmin=req=>{try{const c=(req.headers.get('cookie')||'').match(/(?:^|; )adm=([^;]+)/);if(!c)return false;const [p,m]=c[1].split('.');return safe(hmac(sec(),'adm'+p).slice(0,32),m)&&JSON.parse(Buffer.from(p,'base64url').toString()).x>Date.now();}catch{return false;}};
-export const passOk=p=>{const a=env('ADMIN_PASSWORD');return a.length>=8&&safe(hmac('pw',String(p).trim()),hmac('pw',a));};
+export const passOk=p=>{const a=env('ADMIN_PASSWORD'),t=env('TOKEN_SECRET'),want=a.length>=8?a:(t.length>=16?t:'');return want.length>=8&&safe(hmac('pw',String(p).trim()),hmac('pw',want));};
