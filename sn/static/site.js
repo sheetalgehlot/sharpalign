@@ -1,17 +1,77 @@
 (()=>{
 const g=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}},s=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const C=window.SA_CAMP,P=(C&&C.phases)||{},N=(C&&C.names)||{},inr=n=>'₹'+Number(n).toLocaleString('en-IN'),dt=ms=>new Date(ms).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+const st=(c,n=Date.now())=>{const f=P[c];return !f?'open':n<f.open?'soon':n<f.end?'launch':'after'};
+const T=ms=>{const x=Math.max(0,Math.floor((ms-Date.now())/1e3)),d=Math.floor(x/86400),h=Math.floor(x%86400/3600),m=Math.floor(x%3600/60);return(d?d+'d ':'')+h+'h '+m+'m '+(x%60)+'s'};
+const offer=(f)=>{const t=[];if(f.launch_price)t.push(inr(f.launch_price)+' each');if(f.discount_pct)t.push(f.discount_pct+'% off'+(f.waitlist_required?' for waitlist members':''));return t.join(' · ')};
+const rw=Object.entries(P).find(([c,f])=>f.reward_price);
+const live=()=>Object.entries(P).filter(([c,f])=>f.end>f.open&&Date.now()>=f.open&&Date.now()<f.end).sort((a,b)=>a[1].end-b[1].end)[0];
+window.SA={C,inr,dt,
+ perks:d=>(d.founder?'<p class="offer">🏅 <b>Founding Customer #'+d.founder+'</b>: '+C.perks.discount_pct+'% off any PDF, early access to new launches, free updates in My Library.</p>':'')+(d.top?'<p class="offer">🏆 <b>'+(d.top==='top10'?'Top 10':'Top 100')+' referrer</b>: '+C.perks.discount_pct+'% off any PDF, early access'+(d.top==='top10'?', free new launches':'')+'.</p>':''),
+ prog:d=>{if(!C)return '';
+  if(d.unlock&&d.unlock.until>Date.now())return '<p class="offer">🏆 Unlocked! All '+d.cat+' books are '+inr(rw?rw[1].reward_price:0)+' for you until '+dt(d.unlock.until)+'.</p>';
+  let h='';if(d.on&&rw){const n=d.refs||0,need=d.need,pc=Math.min(100,Math.round(n/need*100));
+   h+='<p><b>'+n+' of '+need+'</b> friends bought through your link. '+Math.max(0,need-n)+' more to unlock '+inr(rw[1].reward_price)+' on all '+d.cat+' books.</p><div class="pbar"><div class="pfill" style="width:'+pc+'%"></div></div><p class="note">Offer ends in <b class="sa-t" data-to="'+d.until+'"></b></p>'}
+  if(Date.now()<C.rank_end)h+='<p class="note">Total referrals: <b>'+(d.total||0)+'</b>. Leaderboard closes in <b class="sa-t" data-to="'+C.rank_end+'"></b>. <a href="/leaderboard/">See prizes</a></p>';return h},
+ share:ln=>{const l=live(),m=(l?'Sharpalign '+N[l[0]]+' launch offer: '+offer(l[1])+' until '+dt(l[1].end)+'. ':'I love these PDFs from Sharpalign. ')+'My link: '+ln;
+  return '<p><a class="cta" href="https://wa.me/?text='+encodeURIComponent(m)+'">WhatsApp</a> <a class="cta" href="https://t.me/share/url?url='+encodeURIComponent(ln)+'&text='+encodeURIComponent(m)+'">Telegram</a> <button class="cta" data-copy="'+m.replace(/"/g,'&quot;')+'">Copy message</button></p>'}};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-copy]');if(b){try{navigator.clipboard.writeText(b.dataset.copy)}catch(x){}b.textContent='Copied ✓'}});
+// ---- top bar + timers ----
+const bar=document.createElement('div');bar.className='bar';let cur='';
+const render=()=>{if(!C)return;const l=live(),nx=Object.entries(P).filter(([c,f])=>Date.now()<f.open).sort((a,b)=>a[1].open-b[1].open)[0];let h='';
+ if(l){const[c,f]=l;h='🎉 <b>'+N[c]+' launch offer:</b> '+offer(f)+(f.reward_price?' · refer '+C.unlock_referrals+' friends → '+inr(f.reward_price):'')+' · ends in <b class="sa-t" data-to="'+f.end+'"></b> · <a href="/'+c+'/">Shop</a>'}
+ else if(nx){const[c,f]=nx;h='⏳ <b>'+N[c]+'</b> opens in <b class="sa-t" data-to="'+f.open+'"></b> · <a href="/'+c+'/">'+(f.waitlist_required?'Join the waitlist':'Get notified')+'</a>'}
+ if(h!==cur){cur=h;if(h){bar.innerHTML=h;if(!bar.isConnected)document.body.prepend(bar)}else bar.remove()}
+ document.querySelectorAll('.ph').forEach(e=>{const c=e.dataset.cat,f=P[c],x=st(c),k=e.dataset.s;if(k===x||!f)return;e.dataset.s=x;
+  e.querySelector('.st').innerHTML=f.end<=f.open?'':x==='launch'?'🔴 Live now · ends in <b class="sa-t" data-to="'+f.end+'"></b>':x==='soon'?'⏳ Opens in <b class="sa-t" data-to="'+f.open+'"></b>':'Launch offer ended'});
+ document.querySelectorAll('.sa-t[data-to]').forEach(e=>e.textContent=T(+e.dataset.to))};
+if(C){render();setInterval(render,1000)}
+// ---- cards ----
+document.querySelectorAll('.pr[data-price]').forEach(e=>{const c=e.dataset.cat,f=P[c],x=st(c),p0=+e.dataset.price;if(!f)return;
+ if(x==='soon'){const b=e.parentNode.querySelector('.buy');if(b)b.textContent='Opens '+dt(f.open)}
+ else if(x==='launch'&&!f.waitlist_required){let v=p0;if(f.launch_price)v=Math.min(v,f.launch_price);if(f.discount_pct)v=Math.min(v,Math.floor(p0*(100-f.discount_pct)/100));if(v<p0)e.innerHTML=inr(v)+' <s>'+inr(p0)+'</s>'}});
+// ---- waitlist / notify forms ----
+const cat=((document.body.className.match(/\bt-(\w+)/)||[])[1]),f0=P[cat],soonEl=document.getElementById('soon'),box=document.getElementById('buybox');
+const wlForm=(c,f)=>'<form class="wl" data-cat="'+c+'"><label>'+(f.waitlist_required?'Join the waitlist. Only waitlist members get the launch price.':'Get an email when it opens')+'</label><input type="email" required placeholder="you@example.com" autocomplete="email"><input class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">'+(f.waitlist_required?'Join waitlist':'Notify me')+'</button><p class="note wm" role="status"></p></form>';
+const gate=()=>{if(!soonEl||!f0)return;const x=st(cat);
+ if(x==='soon'){soonEl.innerHTML='<div class="offer">🔒 <b>'+N[cat]+'</b> opens on '+dt(f0.open)+' · in <b class="sa-t" data-to="'+f0.open+'"></b>'+(f0.waitlist_required?'<br>🎁 Waitlist members get '+f0.discount_pct+'% off at launch. This offer will never return.':(f0.end>f0.open?'<br>🎁 Launch offer: '+offer(f0)+' for the first week, one time only.':''))+'</div>'+wlForm(cat,f0);if(box)box.hidden=true}
+ else if(x==='launch'&&f0.waitlist_required)soonEl.innerHTML='<div class="offer">🎁 Waitlist launch price ends in <b class="sa-t" data-to="'+f0.end+'"></b>. It is only for people who joined the waitlist before launch.</div>';
+ else if(x==='launch'&&f0.end>f0.open)soonEl.innerHTML='<div class="offer">🎉 Launch offer: '+offer(f0)+' · ends in <b class="sa-t" data-to="'+f0.end+'"></b></div>'};
+gate();
+document.addEventListener('submit',async e=>{const w=e.target.closest('.wl');if(!w)return;e.preventDefault();const m=w.querySelector('.wm'),b=w.querySelector('button');b.disabled=true;m.textContent='Saving…';
+ try{const x=await (await fetch('/api/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:w.querySelector('input[type=email]').value,cat:w.dataset.cat,website:w.querySelector('.hp').value})})).json();
+ if(x.ok)w.innerHTML='<p><b>You are on the list ✓</b> We will email you when it opens.</p>';else{m.textContent=x.error||'Could not save. Please try again.';b.disabled=false}}catch(y){m.textContent='Could not save. Please try again.';b.disabled=false}});
 const r=new URLSearchParams(location.search).get('ref');if(r&&/^[A-Fa-f0-9]{8}$/.test(r))s('sa_ref',r.toUpperCase());
+// ---- review form ----
+const rf=document.getElementById('rvf');
+if(rf)rf.addEventListener('submit',async e=>{e.preventDefault();const m=document.getElementById('rvm'),b=rf.querySelector('button');b.disabled=true;m.textContent='Sending…';
+ try{const x=await (await fetch('/api/review',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slug:rf.dataset.slug,rating:document.getElementById('rvr').value,name:document.getElementById('rvn').value,text:document.getElementById('rvt').value,website:document.getElementById('rvw').value})})).json();
+ if(x.ok)rf.innerHTML='<p>Thank you! Your review will appear after we check it.</p>';else{m.textContent=x.error||'Could not send. Please try again.';b.disabled=false}}catch(y){m.textContent='Could not send. Please try again.';b.disabled=false}});
+// ---- join the referral club ----
+const jf=document.getElementById('jf');
+if(jf)jf.addEventListener('submit',async e=>{e.preventDefault();const m=document.getElementById('jm'),b=jf.querySelector('button');b.disabled=true;m.textContent='Sending…';
+ try{const x=await (await fetch('/api/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('je').value,website:document.getElementById('jw').value})})).json();
+ if(x.ok)jf.innerHTML='<p><b>Done!</b> We emailed your personal link. Check your inbox and spam folder.</p>';else{m.textContent=x.error||'Could not send. Please try again.';b.disabled=false}}catch(y){m.textContent='Could not send. Please try again.';b.disabled=false}});
+// ---- buy button ----
 const btn=document.querySelector('[data-buy]');if(!btn)return;
-const msg=document.getElementById('msg'),slug=btn.dataset.buy,inr=n=>'₹'+n.toLocaleString('en-IN');
-fetch('/api/quote?slug='+slug+'&ref='+g('sa_ref')+'&ck='+g('sa_ck')).then(x=>x.json()).then(q=>{
+const msg=document.getElementById('msg'),slug=btn.dataset.buy,buyer=document.getElementById('buyer');
+const load=email=>fetch('/api/quote?slug='+slug+'&ref='+g('sa_ref')+'&ck='+g('sa_ck')+(email?'&email='+encodeURIComponent(email):'')).then(x=>x.json()).then(q=>{
  if(q.pay==null)return;
- if(q.pay<q.price)document.getElementById('price').innerHTML=inr(q.pay)+' <s>'+inr(q.price)+'</s>';
+ if(q.locked){if(box)box.hidden=true;return}
+ if(box&&st(cat)==='soon'){box.hidden=false;soonEl.innerHTML='<div class="offer">🏅 Early access for members: you can buy before the public launch.</div>'}
+ document.getElementById('price').innerHTML=q.pay<q.price?inr(q.pay)+' <s>'+inr(q.price)+'</s>':inr(q.price);
  btn.textContent='Buy now · '+inr(q.pay);
- let h='';if(q.fd>0)h+='<p class="offer">🎁 Friend offer: you save '+inr(q.fd)+' on your first purchase.</p>';
+ let h='';
+ if(q.tag==='reward')h+='<p class="offer">🏆 You unlocked '+inr(q.base)+' for all '+cat+' books!</p>';
+ else if(q.tag==='perk')h+='<p class="offer">🏅 Your VIP price: '+inr(q.base)+' ('+C.perks.discount_pct+'% off).</p>';
+ else if(q.tag==='launch')h+='<p class="offer">🎉 Launch price '+inr(q.base)+(f0?' until '+dt(f0.end):'')+'.'+(rw&&cat===rw[0]?' <a href="/refer/">Refer '+C.unlock_referrals+' friends to get '+inr(rw[1].reward_price)+'</a>':'')+'</p>';
+ if(q.wl)h+='<p class="offer">🔔 The launch price is for waitlist members who joined before launch. Enter the email you joined with to check.</p>';
+ if(q.fd>0)h+='<p class="offer">🎁 Friend offer: you save '+inr(q.fd)+' on your first purchase.</p>';
  if(q.credit>0)h+='<p class="offer">💳 Your referral credit of '+inr(q.credit)+' is applied at checkout.</p>';
- document.getElementById('offers').innerHTML=h;}).catch(()=>{});
+ document.getElementById('offers').innerHTML=h}).catch(()=>{});
+load('');buyer.addEventListener('change',()=>load(buyer.value.trim()));
 btn.addEventListener('click',async()=>{
- const email=document.getElementById('buyer').value.trim();
+ const email=buyer.value.trim();
  if(!/^\S+@\S+\.\S+$/.test(email)){msg.textContent='Enter a valid email so we can send your PDF link.';return}
  btn.disabled=true;msg.textContent='Opening secure payment...';
  try{

@@ -131,3 +131,12 @@ input,select,textarea{width:100%;padding:12px;border:2px solid var(--ln);border-
 /* referrals */
 .offer{background:var(--sf);border:1px dashed var(--ac);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:14px}
 s{opacity:.6;font-size:.6em}
+#rvf{position:relative}.panel h3{margin:18px 0 6px;font-size:22px}
+/* launch offer */
+.bar{background:#14213d;color:#fff;text-align:center;padding:9px 12px;font-size:14px}.bar a{color:#ffd23f;font-weight:700}
+.pbar{background:var(--ln);border-radius:99px;height:14px;overflow:hidden;margin:6px 0}.pfill{height:100%;background:var(--ac);border-radius:99px}
+#jf{position:relative}
+/* phases and rewards */
+.phs{display:grid;gap:10px}.ph{display:grid;gap:2px;border-left:5px solid var(--ac);padding:8px 12px;background:var(--bg);border-radius:6px}
+.ph b{font:800 20px var(--hd)}.ph span,.ph em{color:var(--mu);font-style:normal}
+.wl{position:relative;margin:10px 0}.lb{width:100%;border-collapse:collapse}.lb th,.lb td{padding:8px;border-bottom:1px solid var(--ln);text-align:left}

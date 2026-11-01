@@ -1,4 +1,4 @@
-import {json,store,env,mail,P,CFG,rkey,rcode,mkToken,mkAdmin,isAdmin,passOk,balance} from './_lib.mjs';
+import {json,store,env,mail,P,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOk,balance} from './_lib.mjs';
 const SLUG=/^[a-z0-9-]{1,80}$/,CATS=['kids','cooking','journals','novels','trading'];
 export default async req=>{
  const u=new URL(req.url),a=u.searchParams.get('a')||'',q=k=>u.searchParams.get(k)||'',s=store(),origin=u.origin;
@@ -14,8 +14,21 @@ export default async req=>{
  if(a==='resend'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);
   await mail(r.email,'Your PDF link: '+(P[r.slug]?.title||r.slug),`Here is your download link again:\n${origin}/thank-you/?t=${mkToken(b.oid,r.slug,Date.now())}\n\nThe link works for ${CFG.link_days} days.\n\nSharpalign`);return json({ok:true});}
  if(a==='resetdl'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);r.dl=0;await s.setJSON('order/'+b.oid,r);return json({ok:true});}
- if(a==='credit'){const o=(await all('ref/')).filter(x=>x[1]).map(([k,r])=>{const [b,p]=balance(r);return {code:k.slice(4),email:r.email,avail:b,pending:p,earned:r.ledger.reduce((n,x)=>n+(x.type==='earn'?x.amt:0),0)};});return json({items:o});}
+ if(a==='credit'){const o=(await all('ref/')).filter(x=>x[1]).map(([k,r])=>{const [b,p]=balance(r);return {code:k.slice(4),email:r.email,avail:b,pending:p,earned:r.ledger.reduce((n,x)=>n+(x.type==='earn'?x.amt:0),0),refs:(r.refs||[]).length,unlock:r.unlock||null};});return json({items:o});}
  if(a==='adjust'){const b=await req.json(),k='ref/'+String(b.code).toUpperCase(),r=await g(k,null),amt=parseInt(b.amt);if(!r||!amt)return json({error:'Check the code and amount'},400);r.ledger.push({t:Date.now(),type:'adj',amt});await s.setJSON(k,r);return json({ok:true});}
+ if(a==='unlock'){const b=await req.json(),k='ref/'+String(b.code).toUpperCase(),r=await g(k,null);if(!r)return json({error:'Not found'},404);if(b.on)r.unlock={t:Date.now(),until:Date.now()+((rwp()||[0,{}])[1].reward_days||7)*864e5};else delete r.unlock;await s.setJSON(k,r);return json({ok:true});}
+ if(a==='waitlist'){return json({items:(await all('wl/')).filter(x=>x[1]).map(x=>x[1])});}
+ if(a==='notify'){const b=await req.json(),cat=String(b.cat||'');if(!b.subject||!b.body)return json({error:'Write a subject and a message.'},400);let sent=0,left=0;
+  for(const [k,e] of await all('wl/')){if(!e||!e.cats||!e.cats[cat]||(e.notified||{})[cat])continue;if(sent>=80){left++;continue;}
+   await mail(e.email,String(b.subject).slice(0,150),String(b.body).slice(0,3000)+'\n\n--\nSharpalign. You get this because you asked to be notified. Reply STOP to unsubscribe.');e.notified={...(e.notified||{}),[cat]:Date.now()};await s.setJSON(k,e);sent++;}
+  return json({ok:true,sent,left});}
+ if(a==='ranking'){const lst=await all('ref/'),rows=[];for(const [k,r] of lst){if(!r)continue;const n=(r.refs||[]).length;if(n||r.top||r.founder)rows.push({code:k.slice(4),email:r.email,n,t:n?Math.max(...r.refs.map(x=>x.t)):0,founder:r.founder||0,top:r.top||''});}
+  rows.sort((x,y)=>y.n-x.n||x.t-y.t);return json({items:rows.slice(0,150),members:lst.length,rankEnd:CP.rank_end||0,finalized:await g('meta/finalized',null),min:(CP.perks||{}).min_referrals||3});}
+ if(a==='finalize'){const pk=CP.perks||{},min=pk.min_referrals||3,lst=await all('ref/');
+  const rows=lst.filter(x=>x[1]&&(x[1].refs||[]).length>=min).map(([k,r])=>({k,r,n:r.refs.length,t:Math.max(...r.refs.map(x=>x.t))})).sort((x,y)=>y.n-x.n||x.t-y.t).slice(0,pk.top_vip||100);
+  let i=0;for(const {k,r} of rows){i++;r.top=i<=(pk.top_free||10)?'top10':'top100';r.rank=i;await s.setJSON(k,r);
+   await mail(r.email,'You made the Sharpalign Top '+(i<=(pk.top_free||10)?'10':'100')+'!','Congratulations! You finished at rank #'+i+' in our referral ranking.\n\nYour perks: '+pk.discount_pct+'% off any PDF, early access to new launches'+(r.top==='top10'?', and free access to new launches':'')+'. Open your private page to see them: '+origin+'/credit/#'+rkey(k.slice(4))+'\n\nWe will contact you about any prize.\n\nSharpalign');}
+  await s.setJSON('meta/finalized',{t:Date.now(),count:rows.length});return json({ok:true,count:rows.length});}
  if(a==='reviews'){return json({items:(await all('rv/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(3),title:P[r.slug]?.title||r.slug,...r,status:r.status||'pending'}))});}
  if(a==='reviewset'){const b=await req.json(),k='rv/'+b.oid,r=await g(k,null);if(!r)return json({error:'Not found'},404);r.status=['approved','rejected'].includes(b.status)?b.status:'pending';await s.setJSON(k,r);await mark();return json({ok:true});}
  if(a==='products'){const ap=await g('adm/products',[]),pd=await g('adm/pdfs',{}),cv=await g('adm/covers',{}),rm=await g('adm/removed',[]),seen=new Set(),items=[];

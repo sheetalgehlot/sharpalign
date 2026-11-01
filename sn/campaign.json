@@ -1,0 +1,21 @@
+{
+ "enabled": true,
+ "start": "2026-11-02T00:00:00+05:30",
+ "unlock_referrals": 5,
+ "phases": {
+  "cooking":  {"open_day": 0,  "days": 7, "launch_price": 399, "reward_price": 299, "reward_days": 7},
+  "kids":     {"open_day": 7,  "days": 7, "discount_pct": 40},
+  "journals": {"open_day": 15, "days": 7, "discount_pct": 40},
+  "trading":  {"open_day": 30, "days": 7, "discount_pct": 50, "waitlist_required": true},
+  "novels":   {"open_day": 0,  "days": 0}
+ },
+ "perks": {"founders": 100, "discount_pct": 50, "early_hours": 48, "top_vip": 100, "top_free": 10, "min_referrals": 3, "ranking_days": 45},
+ "min_pay_pct": 30,
+ "prizes": [
+  {"ranks": "Rank 1", "title": "Grand prize: 1 g gold coin", "unlock_members": 500},
+  {"ranks": "Ranks 2 to 3", "title": "Silver coin", "unlock_members": 300},
+  {"ranks": "Ranks 4 to 10", "title": "Gift voucher", "unlock_members": 150},
+  {"ranks": "Top 10", "title": "Free access to every new launch", "unlock_members": 0},
+  {"ranks": "Top 100", "title": "VIP: 50% off any PDF, early access to launches", "unlock_members": 0}
+ ]
+}

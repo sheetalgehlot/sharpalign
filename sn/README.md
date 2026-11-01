@@ -40,6 +40,25 @@ Option A (easy, no tools): upload the PDF to `private-pdfs/`, the cover to `cove
 Option B (Python on your computer): `python add_product.py --title "..." --cat kids --price 149 --pdf book.pdf --cover cover.jpg --pages 24 --short "..." --desc "..."`, then upload the changed files.
 The page, sitemap and Google product data are created automatically on each build. A product shows "Coming soon" until its PDF exists.
 
+## Launch plan, timers, perks and rewards (campaign.json)
+`campaign.json` runs the whole launch. Day 0 is the `start` date (change it to your real launch date, in India time).
+- **Cooking** opens on day 0. Launch price 399 for 7 days. A person who gets 5 different first-time customers to buy through their link in that week unlocks 299 on all cooking books for 7 days (one time only).
+- **Kids** opens on day 7 with 40% off for 7 days. **Journals** open on day 15 with 40% off for 7 days. **Trading** opens on day 30 with 50% off for 7 days, **only for people who joined the waitlist before it opened**. Change `open_day`, `days`, `discount_pct`, `launch_price` for each.
+- Before a section opens, its pages show a countdown and an email box ("Get notified" or "Join the waitlist"). Nobody can buy until it opens (except VIP early access below).
+- **Founding customers**: the first 100 customers get 50% off any PDF, early access (48 hours before each launch) and free updates through My Library.
+- **Top referrers**: the ranking runs for `ranking_days` (45). Afterwards open Admin > Ranking > Finalize (do this after your refund window). The top 100 become VIP (same perks). The top 10 also get free access to every new launch.
+- **My Library** (on each person's private page) always offers the latest version of every PDF they bought. When you upload a new version of a PDF in the admin page, buyers get it automatically.
+- **Prizes** are listed in `prizes`. A prize shows as a locked mystery prize until that many members have joined, then it is revealed. Edit titles and member targets to match what you can afford. A prize only goes ahead when its target is reached (the rewards terms say so).
+- **Safety rules built in**: the best single offer applies (discounts are not stacked on top of the 50% perk), and no order can go below `min_pay_pct` (30%) of the regular price, even with store credit.
+
+### Admin tabs
+- **Ranking**: live leaderboard with emails, Finalize button, founder badges.
+- **Waitlist**: how many emails per section, CSV download, and "Send a launch email" (80 per press, within Brevo's free daily limit). Each email carries an unsubscribe line. Only email people who asked to be notified.
+- **Credit**: grant or revoke the cooking reward, adjust balances.
+
+### Prize ideas (pick what fits your budget)
+Gold or silver coin for the top 1 to 3, gift vouchers for ranks 4 to 10, a "Wall of Fame" page, your name printed inside the next PDF, a custom PDF written for the winner, or a signed print copy. Keep costs below what the extra sales bring in, ask an accountant about tax on prizes, and get a delivery address and ID details only from winners.
+
 ## Reviews
 Buyers rate on the download page and you get an email. Approve or reject it in the admin page. You can still add reviews by hand in `reviews.json`. Only show real reviews.
 

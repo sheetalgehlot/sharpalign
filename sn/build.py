@@ -6,6 +6,17 @@ CFG = json.load(open('config.json', encoding='utf-8')); SITE = CFG['site'].rstri
 E = lambda s: html.escape(str(s), quote=True)
 INR = lambda n: '₹{:,}'.format(int(n))
 load = lambda f, d: json.load(open(f, encoding='utf-8')) if os.path.isfile(f) else d
+CAMP = load('campaign.json', {'enabled': False})
+IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+_ms = lambda x: int(datetime.datetime.fromisoformat(x).timestamp() * 1000)
+_dd = lambda ms: datetime.datetime.fromtimestamp(ms / 1000, tz=IST).strftime('%d %b %Y').lstrip('0')
+CP = {'enabled': False}
+if CAMP.get('enabled'):
+    _t0 = _ms(CAMP['start']); _D = 86400000; _ph = {}
+    for _c, _f in CAMP['phases'].items():
+        _ph[_c] = dict({'open': _t0 + int(_f['open_day']) * _D, 'end': _t0 + (int(_f['open_day']) + int(_f['days'])) * _D}, **{k: _f[k] for k in ('launch_price', 'discount_pct', 'reward_price', 'reward_days', 'waitlist_required') if k in _f})
+    _pk = CAMP.get('perks', {})
+    CP = {'enabled': True, 'start': _t0, 'unlock_referrals': CAMP['unlock_referrals'], 'phases': _ph, 'perks': _pk, 'min_pay_pct': CAMP.get('min_pay_pct', 30), 'rank_end': _t0 + int(_pk.get('ranking_days', 45)) * _D, 'prizes': CAMP.get('prizes', [])}
 CATS = {
  'kids': dict(name='Kid Sharpalign', short='Kids', title='Kids Story Books & ABC Rhymes (PDF) | Kid Sharpalign', meta='Kids story books, ABC rhymes and picture books as instant PDF downloads. Pay with UPI or card and read today.', h1='Story time starts here!', intro='Bedtime stories, ABC rhymes and picture books for little ones. Download the PDF and read together tonight.', emo='', sub='Story books and ABC rhymes', ic='🦊'),
  'cooking': dict(name='Cooking Sharpalign', short='Cooking', title='Easy Cookbooks & Recipe PDFs | Cooking Sharpalign', meta='Easy Indian dinners, tiffin ideas and eggless baking cookbooks as instant PDF downloads.', h1='Today’s menu: easy recipes to download', intro='Quick dinners, tiffin ideas and baking, with shopping lists you can print.', emo='🍳 🥘 🧁 🥗', sub='Easy recipes and meal planners', ic='🍛'),
@@ -41,8 +52,8 @@ def write(path, s):
     path = os.path.join('dist', path.lstrip('/')); os.makedirs(os.path.dirname(path), exist_ok=True); open(path, 'w', encoding='utf-8').write(s)
 # data for the serverless functions
 os.makedirs('netlify/functions', exist_ok=True)
-open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}) + ';\n')
-open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf']} for p in products}, ensure_ascii=False) + ';\n')
+open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'campaign': CP, **{k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}}) + ';\n')
+open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf'], 'cat': p['cat']} for p in products}, ensure_ascii=False) + ';\n')
 
 stars = lambda n: '★' * int(round(n)) + '☆' * (5 - int(round(n)))
 rv = lambda s: [r for r in reviews if r['slug'] == s]
@@ -50,17 +61,18 @@ avg = lambda r: sum(x['rating'] for x in r) / len(r) if r else 0
 href = lambda p: '/%s/%s/' % (p['cat'], p['slug'])
 ldjs = lambda j: '<script type="application/ld+json">' + json.dumps(j, ensure_ascii=False).replace('<', '\\u003c') + '</script>'
 FONTS = 'https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;800&amp;family=Caveat:wght@600;700&amp;family=Caveat+Brush&amp;family=Cormorant+Garamond:wght@500;700&amp;family=Nunito:wght@400;700&amp;family=Space+Grotesk:wght@500;700&amp;display=swap'
+CAMPJS = ('<script>window.SA_CAMP=%s</script>' % json.dumps(dict(CP, names={k: c['short'] for k, c in CATS.items()}, rankEndText=_dd(CP['rank_end'])))) if CP['enabled'] else ''
 def head(title, desc, theme, path='', ld=(), img='', noindex=False):
     u = SITE + '/' + path.lstrip('/')
     nav = ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items())
     return ('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
       '<title>%s</title><meta name="description" content="%s"><link rel="canonical" href="%s">%s'
       '<meta property="og:title" content="%s"><meta property="og:description" content="%s"><meta property="og:type" content="website"><meta property="og:url" content="%s"><meta property="og:site_name" content="Sharpalign">%s'
-      '<link rel="stylesheet" href="%s"><link rel="stylesheet" href="/assets/style.css"><script src="/assets/site.js" defer></script>%s</head>'
+      '<link rel="stylesheet" href="%s"><link rel="stylesheet" href="/assets/style.css"><script src="/assets/site.js" defer></script>%s%s</head>'
       '<body class="t-%s"><div class="top"><a class="logo" href="/">Sharpalign</a><nav aria-label="Main">%s</nav></div>') % (
       E(title), E(desc), E(u), '<meta name="robots" content="noindex">' if noindex else '', E(title), E(desc), E(u),
-      '<meta property="og:image" content="%s"><meta name="twitter:card" content="summary_large_image">' % E(img) if img else '', FONTS, ''.join(ldjs(j) for j in ld), theme, nav)
-FOOT = '<footer class="foot"><div class="w"><nav><a href="/page/contact/">Contact</a> <a href="/page/refund/">Refund policy</a> <a href="/page/privacy/">Privacy</a> <a href="/page/terms/">Terms</a> <a href="/page/referral/">Referral terms</a></nav><p>© %d Sharpalign</p></div></footer></body></html>' % datetime.date.today().year
+      '<meta property="og:image" content="%s"><meta name="twitter:card" content="summary_large_image">' % E(img) if img else '', FONTS, CAMPJS, ''.join(ldjs(j) for j in ld), theme, nav)
+FOOT = '<footer class="foot"><div class="w"><nav><a href="/page/contact/">Contact</a> <a href="/page/refund/">Refund policy</a> <a href="/page/privacy/">Privacy</a> <a href="/page/terms/">Terms</a> <a href="/page/referral/">Referral terms</a> <a href="/refer/">Refer &amp; earn</a> <a href="/leaderboard/">Rewards</a> <a href="/page/rewards/">Rewards terms</a></nav><p>© %d Sharpalign</p></div></footer></body></html>' % datetime.date.today().year
 def disc(k): return '<p class="disc"><b>Educational only.</b> These guides teach trading concepts. They are not investment advice or stock tips, and they do not promise profits. Trading carries a risk of loss. Please speak to a SEBI-registered adviser before investing.</p>' if k == 'trading' else ''
 def deco(k):
     if k == 'trading': return '<div class="candles" aria-hidden="true">' + ''.join('<i style="height:%dpx;background:%s"></i>' % (h, '#22c55e' if g else '#ef4444') for h, g in [(60,1),(95,0),(75,1),(125,1),(100,0),(150,1),(130,0),(175,1)]) + '</div>'
@@ -74,23 +86,34 @@ def card(p):
     s = '<article class="card"><a class="cv%s" href="%s" style="background:%s"%s tabindex="-1">%s</a>' % (cls, href(p), E(p['color']), '' if p['img'] else ' aria-hidden="true"', inner)
     s += '<h3><a href="%s">%s</a></h3><p>%s</p>' % (href(p), E(p['title']), E(p['short']))
     if r: s += '<div class="rate"><span class="stars" aria-label="%.1f out of 5">%s</span> (%d)</div>' % (avg(r), stars(avg(r)), len(r))
-    return s + '<div class="row"><span class="pr">%s</span><a class="buy" href="%s">%s</a></div></article>' % (INR(p['price']), href(p), 'View PDF' if p['pdf'] else 'Coming soon')
+    return s + '<div class="row"><span class="pr" data-cat="%s" data-price="%d">%s</span><a class="buy" href="%s">%s</a></div></article>' % (p['cat'], int(p['price']), INR(p['price']), href(p), 'View PDF' if p['pdf'] else 'Coming soon')
 
+def _ph_text(c, f):
+    t = []
+    if f.get('launch_price'): t.append('every book %s' % INR(f['launch_price']))
+    if f.get('discount_pct'): t.append('%d%% off%s' % (f['discount_pct'], ' for people on the waitlist' if f.get('waitlist_required') else ''))
+    if f.get('reward_price'): t.append('refer %d friends and get all books for %s for %d days' % (CP['unlock_referrals'], INR(f['reward_price']), f.get('reward_days', 7)))
+    return ', '.join(t)
+SCHED = ''
+if CP['enabled']:
+    _rows = ''.join('<div class="ph" data-cat="%s"><b>%s</b><span>Opens %s%s</span><em class="st"></em></div>' % (c, E(CATS[c]['name']), _dd(f['open']), (' · ' + _ph_text(c, f)) if f['end'] > f['open'] else '') for c, f in sorted(CP['phases'].items(), key=lambda kv: kv[1]['open']) if c in CATS)
+    SCHED = '<section class="panel" id="schedule"><h2>Launch schedule</h2><div class="phs">%s</div><p class="note">Every launch offer runs once and will not return. <a href="/leaderboard/">See rewards for top referrers</a></p></section>' % _rows
 # ---- home ----
 ld = [{'@context': 'https://schema.org', '@type': 'Organization', 'name': 'Sharpalign', 'url': SITE}, {'@context': 'https://schema.org', '@type': 'WebSite', 'name': 'Sharpalign', 'url': SITE}]
 tiles = ''.join('<a class="tile %s" href="/%s/"><b>%s</b><span>%s</span><i>%s</i></a>' % (k, k, E(c['name']), E(c['sub']), c['ic']) for k, c in CATS.items())
 new = ''.join(card(p) for p in list(reversed(products))[:6])
 write('index.html', head('Sharpalign: PDF Story Books, Cookbooks, Journals, Novels & Trading Guides', 'Instant PDF downloads: kids story books and ABC rhymes, easy cookbooks, guided journals, novels and trading guides. Pay with UPI or card.', 'home', '', ld)
-  + '<header class="hero"><div class="w"><h1>PDF story books, cookbooks, journals, novels and trading guides</h1><p>Instant downloads for every reader. Pay with UPI or card and get your PDF link by email.</p></div></header><main class="w"><div class="tiles">%s</div><h2 class="tag">New PDFs</h2><div class="grid">%s</div><h2 class="tag">How it works</h2><div class="steps"><div><b>Pick a PDF</b><span>Books, cookbooks, journals, novels and trading guides.</span></div><div><b>Pay securely</b><span>UPI, cards and net banking with Razorpay.</span></div><div><b>Download</b><span>You return to our site and your link opens right after payment.</span></div></div></main>' % (tiles, new) + FOOT)
+  + '<header class="hero"><div class="w"><h1>PDF story books, cookbooks, journals, novels and trading guides</h1><p>Instant downloads for every reader. Pay with UPI or card and get your PDF link by email.</p></div></header><main class="w"><div class="tiles">%s</div>%s<h2 class="tag">New PDFs</h2><div class="grid">%s</div><h2 class="tag">How it works</h2><div class="steps"><div><b>Pick a PDF</b><span>Books, cookbooks, journals, novels and trading guides.</span></div><div><b>Pay securely</b><span>UPI, cards and net banking with Razorpay.</span></div><div><b>Download</b><span>You return to our site and your link opens right after payment.</span></div></div></main>' % (tiles, SCHED, new) + FOOT)
 
 # ---- categories ----
 for k, c in CATS.items():
     items = [p for p in products if p['cat'] == k]
     write('%s/index.html' % k, head(c['title'], c['meta'], k, k + '/', [{'@context': 'https://schema.org', '@type': 'CollectionPage', 'name': c['title'], 'description': c['meta'], 'url': '%s/%s/' % (SITE, k)}])
-      + '<header class="hero">%s<div class="w"><h1>%s</h1><p>%s</p><a class="cta" href="#shop">See the PDFs</a>%s</div></header><main class="w" id="shop"><h2 class="tag">%s</h2>%s<div class="grid">%s</div>%s</main>' % (
+      + '<header class="hero">%s<div class="w"><h1>%s</h1><p>%s</p><a class="cta" href="#shop">See the PDFs</a>%s</div></header><main class="w" id="shop"><div id="soon"></div><h2 class="tag">%s</h2>%s<div class="grid">%s</div>%s</main>' % (
         deco(k), E(c['h1']), E(c['intro']), '<div class="emo" aria-hidden="true">%s</div>' % c['emo'] if c['emo'] else '', E(c['name']), disc(k), ''.join(card(p) for p in items), '' if items else '<p class="panel">New PDFs are coming soon.</p>') + FOOT)
 
 # ---- product pages ----
+RVFORM = '<h3>Write a review</h3><form id="rvf" data-slug="%s"><label for="rvr">Your rating</label><select id="rvr"><option value="5">★★★★★ 5 – Loved it</option><option value="4">★★★★☆ 4</option><option value="3">★★★☆☆ 3</option><option value="2">★★☆☆☆ 2</option><option value="1">★☆☆☆☆ 1</option></select><label for="rvn">Your name</label><input id="rvn" maxlength="40" autocomplete="name"><label for="rvt">Your review</label><textarea id="rvt" rows="4" maxlength="600" required></textarea><input id="rvw" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">Submit review</button><p id="rvm" class="note" role="status">Reviews are checked before they appear. Readers who bought this PDF here get a “Verified buyer” label.</p></form>'
 for p in products:
     c = CATS[p['cat']]; r = rv(p['slug']); a = avg(r); path = href(p)
     img = '%s/covers/%s' % (SITE, p['img']) if p['img'] else ''
@@ -102,14 +125,14 @@ for p in products:
         pj['review'] = [{'@type': 'Review', 'author': {'@type': 'Person', 'name': x['name']}, 'reviewRating': {'@type': 'Rating', 'ratingValue': x['rating']}, 'reviewBody': x['text']} for x in r]
     bc = {'@context': 'https://schema.org', '@type': 'BreadcrumbList', 'itemListElement': [{'@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': SITE + '/'}, {'@type': 'ListItem', 'position': 2, 'name': c['short'], 'item': '%s/%s/' % (SITE, p['cat'])}, {'@type': 'ListItem', 'position': 3, 'name': p['title']}]}
     cls, inner = cvparts(p)
-    rate = '<p class="rate"><span class="stars" aria-label="%.1f out of 5">%s</span> %.1f (%d review%s)</p>' % (a, stars(a), a, len(r), 's' if len(r) > 1 else '') if r else '<p class="rate note">No reviews yet. Buyers can review after purchase.</p>'
-    buy = ('<label for="buyer">Your email (we send the PDF link here)</label><input id="buyer" type="email" autocomplete="email" placeholder="you@example.com"><button class="cta" data-buy="%s">Buy now · %s</button><p id="msg" class="note" role="status"></p><p class="note">Secure payment by Razorpay: UPI, cards, net banking and wallets. After paying you return to our site and your download opens right away.</p><script src="https://checkout.razorpay.com/v1/checkout.js"></script>' % (E(p['slug']), INR(p['price']))) if p['pdf'] else '<p class="note">This PDF is coming soon.</p>'
+    rate = '<p class="rate"><span class="stars" aria-label="%.1f out of 5">%s</span> %.1f (%d review%s) · <a href="#reviews">Write a review</a></p>' % (a, stars(a), a, len(r), 's' if len(r) > 1 else '') if r else '<p class="rate note">No reviews yet. <a href="#reviews">Be the first to review</a></p>'
+    buy = ('<div id="buybox"><label for="buyer">Your email (we send the PDF link here)</label><input id="buyer" type="email" autocomplete="email" placeholder="you@example.com"><button class="cta" data-buy="%s">Buy now · %s</button><p id="msg" class="note" role="status"></p><p class="note">Secure payment by Razorpay: UPI, cards, net banking and wallets. After paying you return to our site and your download opens right away.</p><script src="https://checkout.razorpay.com/v1/checkout.js"></script></div>' % (E(p['slug']), INR(p['price']))) if p['pdf'] else '<p class="note">This PDF is coming soon.</p>'
     revs = ''.join('<div class="rev"><span class="stars">%s</span> <b>%s</b>%s<p>%s</p></div>' % (stars(x['rating']), E(x['name']), ' <small>Verified buyer</small>' if x.get('verified') else '', E(x['text'])) for x in r) or '<p>No reviews yet.</p>'
     rel = [x for x in products if x['cat'] == p['cat'] and x['slug'] != p['slug']][:3]
     write(path + 'index.html', head('%s (PDF) | %s' % (p['title'], c['name']), p['short'], p['cat'], path, [pj, bc], img)
-      + '<main class="w"><p class="crumbs"><a href="/">Home</a> / <a href="/%s/">%s</a> / %s</p><div class="prod"><div class="cv big%s" style="background:%s"%s>%s</div><div class="panel"><h1>%s</h1>%s<p class="pr big" id="price">%s</p><div id="offers"></div><p>%s</p>%s</div></div>' % (
+      + '<main class="w"><p class="crumbs"><a href="/">Home</a> / <a href="/%s/">%s</a> / %s</p><div class="prod"><div class="cv big%s" style="background:%s"%s>%s</div><div class="panel"><h1>%s</h1>%s<p class="pr big" id="price">%s</p><div id="offers"></div><div id="soon"></div><p>%s</p>%s</div></div>' % (
         p['cat'], E(c['short']), E(p['title']), cls, E(p['color']), '' if p['img'] else ' role="img" aria-label="Cover of %s"' % E(p['title']), inner, E(p['title']), rate, INR(p['price']), E(p['short']), buy)
-      + '<section class="panel"><h2>About this PDF</h2>%s<ul><li>%d pages, PDF format</li><li>Opens on phone, tablet and computer</li><li>Link sent by email after payment</li></ul></section>%s<section class="panel"><h2>Reviews</h2>%s</section>' % (''.join('<p>%s</p>' % E(l) for l in p['desc'].split('\n') if l.strip()), int(p.get('pages', 0)), disc(p['cat']), revs)
+      + '<section class="panel"><h2>About this PDF</h2>%s<ul><li>%d pages, PDF format</li><li>Opens on phone, tablet and computer</li><li>Link sent by email after payment</li></ul></section>%s<section class="panel" id="reviews"><h2>Reviews</h2>%s%s</section>' % (''.join('<p>%s</p>' % E(l) for l in p['desc'].split('\n') if l.strip()), int(p.get('pages', 0)), disc(p['cat']), revs, RVFORM % E(p['slug']))
       + ('<h2 class="tag">More from %s</h2><div class="grid">%s</div>' % (E(c['name']), ''.join(card(x) for x in rel)) if rel else '') + '</main>' + FOOT)
 
 # ---- policy pages ----
@@ -119,16 +142,29 @@ PG = {'contact': ('Contact us', 'Email us at %s. We reply within 2 working days.
  'privacy': ('Privacy policy', 'We collect your email address to send your PDF link and to help with support. Payments are handled by Razorpay, and we never see or store your card or UPI details. We keep a small note in your browser to remember referral links and store credit. We do not sell your data. To have your data removed, email %s.' % m),
  'terms': ('Terms of use', 'By buying a PDF you receive a personal licence to read and print it for your own use. You may not copy, resell or share the file. Download links expire after a limited time or number of downloads. All prices are in Indian rupees. Trading guides are for education only. They are not investment advice and do not promise profits; trading involves risk of loss.'),
  'referral': ('Referral program terms', 'When a friend buys a PDF for the first time through your share link, they get %d%% off and you earn %d%% of the amount they pay as store credit. Credit becomes usable %d days after the purchase, can cover up to %d%% of the price of a PDF, has no cash value and cannot be transferred or sold. Buying through your own link, or with a second email of your own, is not allowed and may cancel the credit. If an order is refunded, the credit earned from it is removed. We may change or end the programme at any time.' % (CFG['friend_discount_pct'], CFG['ref_commission_pct'], CFG['hold_days'], CFG['credit_max_pct']))}
+if CP['enabled']:
+    _lines = ' '.join('%s: opens %s, offer runs until %s (%s).' % (CATS[c]['name'], _dd(f['open']), _dd(f['end'] - 1000), _ph_text(c, f)) for c, f in sorted(CP['phases'].items(), key=lambda kv: kv[1]['open']) if c in CATS and f['end'] > f['open'])
+    PG['launch-offer'] = ('Launch offer terms', 'Each launch offer runs once, on the dates below, and will not be repeated or extended. ' + _lines + ' A section is not on sale before its opening date, except for VIP members who get early access. Waitlist-only offers go only to people whose email joined the waitlist before that section opened. A referral counts only when the friend is a first-time buyer, pays successfully, is not you, and the order is not refunded. The referral reward can be unlocked once per person. Buying through your own link, fake orders or other misuse cancel offers and rewards, and we may end an offer early if there is misuse.')
+    _pk = CP['perks']
+    PG['rewards'] = ('Rewards and VIP terms', ('Founding customers: the first %d people to complete a paid order after the launch starts become Founding Customers. Top referrers: until %s we count the first-time customers who paid through your link (refunded orders are removed). After the ranking closes and the refund period ends, the top %d referrers with at least %d referrals become VIP, and the top %d get extra benefits. Founding and VIP members get: %d%% off any PDF (the best single offer applies, it is never stacked on top of other discounts, and a minimum price of %d%% of the regular price still applies), early access of %d hours to new launches, and free updates to every PDF they bought through My Library. The top %d referrers also get free access to new launches. All perks last as long as Sharpalign runs the programme, are personal, cannot be sold or transferred, and may be changed or ended with notice if abused or if the programme closes. Prizes for top ranks are shown on the Rewards page. A prize only goes ahead when the number of members shown for it is reached, and we may replace a prize with one of similar value. Winners must give a delivery address in India, and any taxes on prizes are the winner\'s responsibility. Fake or self-made referrals disqualify you. Our decision on rankings is final.') % (_pk['founders'], _dd(CP['rank_end']), _pk['top_vip'], _pk['min_referrals'], _pk['top_free'], _pk['discount_pct'], CAMP.get('min_pay_pct', 30), _pk['early_hours'], _pk['top_free']))
 for k, (t, body) in PG.items():
     write('page/%s/index.html' % k, head(t + ' | Sharpalign', t, 'home', 'page/%s/' % k) + '<main class="w"><div class="panel"><h1>%s</h1><p>%s</p></div></main>' % (E(t), E(body)) + FOOT)
 
+_offer = ''
+if CP['enabled']:
+    _offer = '<div class="offer"><b>🎉 Launch schedule</b><br>' + '<br>'.join('%s opens %s: %s' % (CATS[c]['name'], _dd(f['open']), _ph_text(c, f) or 'regular prices') for c, f in sorted(CP['phases'].items(), key=lambda kv: kv[1]['open']) if c in CATS and f['end'] > f['open']) + '<br><a href="/page/launch-offer/">Offer terms</a> · <a href="/leaderboard/">Rewards and leaderboard</a></div>'
+write('refer/index.html', head('Refer friends and earn | Sharpalign', 'Share Sharpalign with friends. They get a discount and you earn store credit, launch rewards and VIP perks.', 'home', 'refer/')
+  + '<main class="w"><div class="panel"><h1>Refer friends and earn</h1>' + _offer + '<p>Friends get %d%% off their first PDF. You earn %d%% of what they pay as store credit. The more friends buy through your link, the higher you climb the <a href="/leaderboard/">leaderboard</a>.</p><ol><li>Enter your email below. You do not need to buy anything first.</li><li>We email you your personal link (check spam too).</li><li>Share it on WhatsApp, Telegram or Instagram and watch your progress on your private page.</li></ol><form id="jf"><label for="je">Your email</label><input id="je" type="email" required autocomplete="email" placeholder="you@example.com"><input id="jw" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">Get my link</button><p id="jm" class="note" role="status"></p></form></div></main>' % (CFG['friend_discount_pct'], CFG['ref_commission_pct']) + FOOT)
+if CP['enabled']:
+    write('leaderboard/index.html', head('Rewards and leaderboard | Sharpalign', 'Top referrers and founding customers get VIP perks and prizes at Sharpalign.', 'home', 'leaderboard/')
+      + '<main class="w"><div class="panel"><h1>Rewards and leaderboard</h1><p>Ranking closes on <b>%s</b> (in <b class="sa-t" data-to="%d"></b>). Final ranks are confirmed after the refund period. <a href="/page/rewards/">Rewards terms</a></p><div class="offer"><b>VIP perks</b> for the first %d customers and the top %d referrers: %d%% off any PDF, early access to new launches, and free updates to every PDF you bought. The top %d also get free access to new launches.</div><p id="lbm" class="note"></p></div><div class="panel"><h2>Prizes</h2><div id="pz"></div></div><div class="panel"><h2>Top referrers</h2><div id="lb">Loading…</div><p class="note">Names are hidden for privacy. <a href="/refer/">Join and get your link</a>, then open your private page to see your rank.</p></div></main><script src="/assets/lb.js" defer></script>' % (_dd(CP['rank_end']), CP['rank_end'], CP['perks']['founders'], CP['perks']['top_vip'], CP['perks']['discount_pct'], CP['perks']['top_free']) + FOOT)
 # ---- return pages, 404, sitemap, robots ----
 def app(title, js, path): return head(title, title, 'home', path, noindex=True) + '<main class="w" id="app"><div class="panel"><p>Loading…</p></div></main><script src="/assets/%s" defer></script>' % js + FOOT
 write('thank-you/index.html', app('Your PDF is ready', 'thanks.js', 'thank-you/'))
 write('credit/index.html', app('My referral credit', 'credit.js', 'credit/'))
 write('404.html', head('Page not found', 'Page not found', 'home', noindex=True) + '<main class="w"><div class="panel"><h1>Page not found</h1><p><a href="/">Back to the shop</a></p></div></main>' + FOOT)
 today = datetime.date.today().isoformat()
-urls = [('', today)] + [(k + '/', today) for k in CATS] + [(href(p).lstrip('/'), p.get('added', today)) for p in products if p['pdf']]
+urls = [('', today), ('refer/', today), ('leaderboard/', today)] + [(k + '/', today) for k in CATS] + [(href(p).lstrip('/'), p.get('added', today)) for p in products if p['pdf']]
 write('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join('<url><loc>%s/%s</loc><lastmod>%s</lastmod></url>' % (SITE, u, d) for u, d in urls) + '</urlset>')
 write('robots.txt', 'User-agent: *\nDisallow: /thank-you/\nDisallow: /credit/\nDisallow: /api/\nDisallow: /admin/\nSitemap: %s/sitemap.xml\n' % SITE)
 os.makedirs('dist/admin', exist_ok=True); shutil.move('dist/assets/admin.html', 'dist/admin/index.html')
