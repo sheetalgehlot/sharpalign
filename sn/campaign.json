@@ -1,6 +1,6 @@
 {
  "enabled": true,
- "start": "2026-11-02T00:00:00+05:30",
+ "start": "2026-11-03T00:00:00+05:30",
  "unlock_referrals": 5,
  "phases": {
   "cooking":  {"open_day": 0,  "days": 7, "launch_price": 399, "reward_price": 299, "reward_days": 7},
