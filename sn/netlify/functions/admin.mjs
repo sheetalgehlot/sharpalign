@@ -1,16 +1,27 @@
-import {json,store,env,mail,P,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOk,balance} from './_lib.mjs';
+import {createHash} from 'node:crypto';
+import {json,store,env,mail,P,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
 const SLUG=/^[a-z0-9-]{1,80}$/,CATS=['kids','cooking','journals','novels','trading'];
 export default async (req,context)=>{
  const u=new URL(req.url),a=u.searchParams.get('a')||'',q=k=>u.searchParams.get(k)||'',s=store(),origin=u.origin;
  const g=async(k,d)=>(await s.get(k,{type:'json'}))||d,mark=()=>s.setJSON('adm/dirty',{v:true});
  const all=async p=>{const o=[];for(const b of (await s.list({prefix:p})).blobs.slice(0,300))o.push([b.key,await g(b.key,null)]);return o;};
+ const tries=async()=>{const ip=(context&&context.ip)||req.headers.get('x-nf-client-connection-ip')||'?',k='rl/a'+createHash('sha256').update(ip+new Date().toISOString().slice(0,13)).digest('hex').slice(0,22);return {k,c:((await s.get(k,{type:'json'}))||{c:0}).c};};
  const ck=(v)=>new Response('{"ok":true}',{headers:{'content-type':'application/json','set-cookie':'adm='+v+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+(v?43200:0)}});
- if(a==='health')return json({admin_password:env('ADMIN_PASSWORD').length>=8,token_secret:env('TOKEN_SECRET').length>=16,razorpay_keys:!!env('RAZORPAY_KEY_ID')&&!!env('RAZORPAY_KEY_SECRET'),razorpay_webhook_secret:!!env('RAZORPAY_WEBHOOK_SECRET'),email:!!env('BREVO_API_KEY')&&!!env('FROM_EMAIL'),export_key:env('EXPORT_KEY').length>=16,build_hook:!!env('BUILD_HOOK_URL'),diag:(()=>{const raw=String(Netlify.env.get('ADMIN_PASSWORD')??''),ks=typeof Netlify.env.toObject==='function'?Object.keys(Netlify.env.toObject()).filter(k=>/admin|pass/i.test(k)).map(k=>JSON.stringify(k)):[];return {deploy_context:(context&&context.deploy&&context.deploy.context)||'unknown',admin_or_pass_names_seen:ks,admin_value:raw===''?'EMPTY or not found':raw.length<8?'too short ('+raw.length+' characters)':'ok (8+ characters)',spaces_or_quotes_at_edges:raw!==raw.trim()||/^["']|["']$/.test(raw.trim())};})()});
+ if(a==='health')return json({admin_password:env('ADMIN_PASSWORD').length>=6,password_source:(await s.get('adm/pw',{type:'json'}))?'saved in the admin page':env('ADMIN_PASSWORD').length>=6?'ADMIN_PASSWORD setting':env('TOKEN_SECRET').length>=16?'TOKEN_SECRET (fallback)':'none',token_secret:env('TOKEN_SECRET').length>=16,razorpay_keys:!!env('RAZORPAY_KEY_ID')&&!!env('RAZORPAY_KEY_SECRET'),razorpay_webhook_secret:!!env('RAZORPAY_WEBHOOK_SECRET'),email:!!env('BREVO_API_KEY')&&!!env('FROM_EMAIL'),export_key:env('EXPORT_KEY').length>=16,build_hook:!!env('BUILD_HOOK_URL'),diag:(()=>{const raw=String(Netlify.env.get('ADMIN_PASSWORD')??''),ks=typeof Netlify.env.toObject==='function'?Object.keys(Netlify.env.toObject()).filter(k=>/admin|pass/i.test(k)).map(k=>JSON.stringify(k)):[];return {deploy_context:(context&&context.deploy&&context.deploy.context)||'unknown',admin_or_pass_names_seen:ks,admin_value:raw===''?'EMPTY or not found':raw.length<6?'too short ('+raw.length+' characters)':'ok (6+ characters)',spaces_or_quotes_at_edges:raw!==raw.trim()||/^["']|["']$/.test(raw.trim())};})()});
  if(a==='login'&&req.method==='POST'){const b=await req.json().catch(()=>({}));
-  if(env('TOKEN_SECRET').length<16)return json({error:'The server cannot see TOKEN_SECRET (missing or under 16 characters). Check it in Netlify, then deploy again.'},500);if(!passOk(b.password)){await new Promise(r=>setTimeout(r,1500));return json({error:env('ADMIN_PASSWORD').length<8?'Wrong password. The server cannot see ADMIN_PASSWORD yet, so type your TOKEN_SECRET value as the password for now.':'Wrong password'},401);}return ck(mkAdmin());}
+  if(env('TOKEN_SECRET').length<16)return json({error:'The server cannot see TOKEN_SECRET (missing or under 16 characters). Check it in Netlify, then deploy again.'},500);const rk=await tries(),saved=await s.get('adm/pw',{type:'json'});
+  if(rk.c>=10)return json({error:'Too many wrong tries. Please wait an hour and try again.'},429);
+  if(!(await passOkAsync(b.password))){await s.setJSON(rk.k,{c:rk.c+1});await new Promise(r=>setTimeout(r,1500));return json({error:saved?'Wrong password':'Wrong password. If you have not created one yet, use "Set or reset password" below.'},401);}return ck(mkAdmin());}
+ if(a==='setpw'&&req.method==='POST'){const b=await req.json().catch(()=>({})),t=env('TOKEN_SECRET'),pw=String(b.password||'').trim(),rk=await tries();
+  if(t.length<16)return json({error:'The server cannot see TOKEN_SECRET (missing or under 16 characters). Check it in Netlify, then deploy again.'},500);
+  if(rk.c>=10)return json({error:'Too many wrong tries. Please wait an hour and try again.'},429);
+  if(!same(String(b.key||'').trim(),t)){await s.setJSON(rk.k,{c:rk.c+1});await new Promise(r=>setTimeout(r,1500));return json({error:'That setup key is not right. It is the TOKEN_SECRET value from Netlify.'},401);}
+  if(pw.length<PW_MIN)return json({error:'Use at least '+PW_MIN+' characters for the new password.'},400);
+  await s.setJSON('adm/pw',hashPw(pw));return ck(mkAdmin());}
  if(a==='logout')return ck('');
  if(!isAdmin(req))return json({error:'login'},401);
  if(req.method!=='GET'&&req.headers.get('x-admin')!=='1')return json({error:'bad request'},400);
+ if(a==='chpw'){const pw=String((await req.json().catch(()=>({}))).password||'').trim();if(pw.length<PW_MIN)return json({error:'Use at least '+PW_MIN+' characters.'},400);await s.setJSON('adm/pw',hashPw(pw));return json({ok:true});}
  if(a==='me')return json({ok:true,dirty:!!(await g('adm/dirty',null))?.v});
  if(a==='orders'){const o=(await all('order/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(6),email:r.email,title:P[r.slug]?.title||r.slug,t:r.t,dl:r.dl}));o.sort((x,y)=>y.t-x.t);return json({items:o.slice(0,100)});}
  if(a==='resend'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);

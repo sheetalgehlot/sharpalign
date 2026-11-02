@@ -1,4 +1,4 @@
-import {createHash,createHmac,timingSafeEqual} from 'node:crypto';
+import {createHash,createHmac,timingSafeEqual,scryptSync,randomBytes} from 'node:crypto';
 import {getStore} from '@netlify/blobs';
 import CFG from './_config.mjs';
 import P from './_products.mjs';
@@ -95,4 +95,9 @@ export async function fulfil(oid,origin){
 // ---- admin ----
 export const mkAdmin=()=>{const p=Buffer.from(JSON.stringify({a:1,x:Date.now()+432e5})).toString('base64url');return p+'.'+hmac(sec(),'adm'+p).slice(0,32);};
 export const isAdmin=req=>{try{const c=(req.headers.get('cookie')||'').match(/(?:^|; )adm=([^;]+)/);if(!c)return false;const [p,m]=c[1].split('.');return safe(hmac(sec(),'adm'+p).slice(0,32),m)&&JSON.parse(Buffer.from(p,'base64url').toString()).x>Date.now();}catch{return false;}};
-export const passOk=p=>{const a=env('ADMIN_PASSWORD'),t=env('TOKEN_SECRET'),want=a.length>=8?a:(t.length>=16?t:'');return want.length>=8&&safe(hmac('pw',String(p).trim()),hmac('pw',want));};
+export const PW_MIN=6;
+export const same=(a,b)=>safe(hmac('cmp',String(a)),hmac('cmp',String(b)));
+export const hashPw=(p,salt=randomBytes(16).toString('hex'))=>({salt,hash:scryptSync(String(p).trim(),salt,32).toString('hex')});
+// Password order: 1) the one saved from the admin page, 2) the ADMIN_PASSWORD setting, 3) TOKEN_SECRET as a last resort.
+export const passOk=p=>{const a=env('ADMIN_PASSWORD'),t=env('TOKEN_SECRET'),want=a.length>=PW_MIN?a:(t.length>=16?t:'');return want.length>=PW_MIN&&same(String(p).trim(),want);};
+export async function passOkAsync(p){const saved=await store().get('adm/pw',{type:'json'});if(saved&&saved.salt)return safe(scryptSync(String(p).trim(),saved.salt,32).toString('hex'),saved.hash);return passOk(p);}
