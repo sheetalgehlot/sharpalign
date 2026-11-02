@@ -2,9 +2,11 @@
 const $=s=>document.querySelector(s),H=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),inr=n=>'₹'+Number(n).toLocaleString('en-IN');
 const CATS=['kids','cooking','journals','novels','trading'];let tab='orders',target=null;
 async function api(a,body,q,type){const o={headers:{'x-admin':'1'}};if(body!==undefined){o.method='POST';o.body=type?body:JSON.stringify(body);o.headers['content-type']=type||'application/json'}
- const r=await fetch('/api/admin?a='+a+(q||''),o);if(r.status===401&&a!=='login'){login();throw new Error('login')}return r.json()}
-function login(){$('#nav').hidden=true;$('#bn').innerHTML='';$('#app').innerHTML='<div class="box"><h2>Log in</h2><input id="pw" type="password" placeholder="Admin password" autocomplete="current-password"><button id="go">Log in</button> <span id="lm" class="mu"></span></div>';
- const go=async()=>{const r=await api('login',{password:$('#pw').value});r.ok?start():$('#lm').textContent=r.error||'Failed'};$('#go').onclick=go;$('#pw').onkeydown=e=>{if(e.key==='Enter')go()}}
+ const r=await fetch('/api/admin?a='+a+(q||''),o);if(r.status===401&&a!=='login'&&a!=='setpw'){login();throw new Error('login')}return r.json()}
+function login(){$('#nav').hidden=true;$('#bn').innerHTML='';
+ $('#app').innerHTML='<div class="box"><h2>Log in</h2><input id="pw" type="password" placeholder="Admin password" autocomplete="current-password"><button id="go">Log in</button> <span id="lm" class="mu"></span></div><div class="box"><h2>Set or reset password</h2><p class="mu">First time, or forgot it? Choose a new password here. As the setup key, type your <b>TOKEN_SECRET</b> value from Netlify (the long random text you made up).</p><label>Setup key (TOKEN_SECRET)</label><input id="sk" type="password" autocomplete="off"><label>New password (6 or more characters)</label><input id="np" type="password" autocomplete="new-password"><button id="sp">Save password and log in</button> <span id="sm" class="mu"></span></div>';
+ const go=async()=>{const r=await api('login',{password:$('#pw').value});r.ok?start():$('#lm').textContent=r.error||'Failed'};$('#go').onclick=go;$('#pw').onkeydown=e=>{if(e.key==='Enter')go()};
+ $('#sp').onclick=async()=>{const r=await api('setpw',{key:$('#sk').value,password:$('#np').value});r.ok?start():$('#sm').textContent=r.error||'Failed'}}
 function banner(m){$('#bn').innerHTML=m.dirty?'<div class="warn">Changes are saved but not live yet. <button id="pub">Publish now</button> <span id="pm"></span></div>':'';
  if(m.dirty)$('#pub').onclick=async()=>{$('#pm').textContent='Publishing…';const r=await api('publish',{});$('#pm').textContent=r.ok?'Started. It goes live in about a minute.':(r.error||'Failed')}}
 const refresh=()=>api('me').then(banner).catch(()=>{});
@@ -42,6 +44,7 @@ async function saveProduct(e){e.preventDefault();const d=Object.fromEntries(new 
  try{if($('#cov').files[0]){st.textContent='Uploading cover…';await upCover(r.slug,$('#cov').files[0])}if($('#pdf').files[0])await upPdf(r.slug,$('#pdf').files[0],p=>st.textContent='Uploading PDF '+p+'%')}catch(x){st.textContent='Upload problem: '+x.message;return}
  await refresh();products()}
 document.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
+ if(b.id==='cp'){const p=prompt('New password (6 or more characters)');if(p){const r=await api('chpw',{password:p});alert(r.ok?'Password changed.':(r.error||'Failed'))}return}
  if(b.id==='lo'){await api('logout');login();return}
  if(b.dataset.t){show(b.dataset.t);return}
  const a=b.dataset.a;if(!a)return;const o=b.dataset.o,s=b.dataset.s;
