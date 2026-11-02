@@ -66,6 +66,7 @@ def head(title, desc, theme, path='', ld=(), img='', noindex=False):
     u = SITE + '/' + path.lstrip('/')
     nav = ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items())
     return ('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      '<meta name="google-site-verification" content="4OWIA6uXwCPAwnlCH-6DOGCC58_7IFrwTYMBWW9ciGA">'
       '<title>%s</title><meta name="description" content="%s"><link rel="canonical" href="%s">%s'
       '<meta property="og:title" content="%s"><meta property="og:description" content="%s"><meta property="og:type" content="website"><meta property="og:url" content="%s"><meta property="og:site_name" content="Sharpalign">%s'
       '<link rel="stylesheet" href="%s"><link rel="stylesheet" href="/assets/style.css"><script src="/assets/site.js" defer></script>%s%s</head>'
