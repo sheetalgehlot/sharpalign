@@ -30,12 +30,12 @@ async function products(){const r=await api('products');
  <label>Price in rupees</label><input name="price" type="number" min="1" required><label>Number of pages</label><input name="pages" type="number" min="0">
  <label>Cover emoji (used when there is no cover image)</label><input name="emoji" maxlength="4" placeholder="📘"><label>Cover colour</label><input name="color" type="color" value="#3b82f6">
  <label>Short description (1–2 sentences, shown on Google)</label><input name="short" maxlength="160"><label>Full description</label><textarea name="desc" rows="5"></textarea>
- <label>Cover image (any picture, cropped to 600×800)</label><input id="cov" type="file" accept="image/*"><label>PDF file (up to about 24 MB)</label><input id="pdf" type="file" accept="application/pdf">
+ <label>Cover image (any picture, cropped to 600×800)</label><input id="cov" type="file" accept="image/*"><label>PDF file (up to about 18 MB)</label><input id="pdf" type="file" accept="application/pdf">
  <button>Save product</button> <span id="ps" class="mu"></span></form></div>${rows}<input id="fp" type="file" hidden>`;
  $('#pf').onsubmit=saveProduct}
 async function coverJpeg(f){const im=await createImageBitmap(f),W=600,Ht=800,c=document.createElement('canvas');c.width=W;c.height=Ht;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,Ht);const s=Math.max(W/im.width,Ht/im.height),w=im.width*s,h=im.height*s;x.drawImage(im,(W-w)/2,(Ht-h)/2,w,h);return new Promise(r=>c.toBlob(r,'image/jpeg',.85))}
 async function upCover(slug,f){const b=await (await coverJpeg(f)).arrayBuffer(),r=await api('cover',b,'&slug='+slug,'application/octet-stream');if(!r.ok)throw new Error(r.error||'cover failed')}
-async function upPdf(slug,f,prog){const C=3*1024*1024,n=Math.ceil(f.size/C);if(n>8)throw new Error('PDF is too big (limit about 24 MB)');
+async function upPdf(slug,f,prog){const C=3*1024*1024,n=Math.ceil(f.size/C);if(n>6)throw new Error('This PDF is too big (limit about 18 MB). Compress it first.');
  for(let i=0;i<n;i++){const b=await f.slice(i*C,(i+1)*C).arrayBuffer();let r,t=0;do{r=await api('chunk',b,`&slug=${slug}&i=${i}&n=${n}&size=${f.size}`,'application/octet-stream')}while(!r.ok&&++t<3);if(!r.ok)throw new Error(r.error||'upload failed');prog(Math.round((i+1)/n*100))}}
 async function saveProduct(e){e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),st=$('#ps');st.textContent='Saving…';
  const r=await api('save',{slug:d.slug,title:d.title,cat:d.cat,price:+d.price,pages:+d.pages||0,emoji:d.emoji,color:d.color,short:d.short,desc:d.desc});
