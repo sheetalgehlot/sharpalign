@@ -16,9 +16,16 @@ const card=(slug,p)=>{const [cls,inner]=cvparts(slug,p),h=`/${p.cat}/${slug}/`;
  return `<article class="card" data-slug="${E(slug)}"><a class="cv${cls}" href="${h}" style="background:${E(p.color||'#3b82f6')}"${cls?'':' aria-hidden="true"'} tabindex="-1">${inner}</a><h3><a href="${h}">${E(p.title)}</a></h3><p>${E(p.short||'')}</p><div class="row"><span class="pr" data-cat="${p.cat}" data-price="${p.price}">${INR(p.price)}</span><a class="buy" href="${h}">${p.pdf?'View PDF':'Coming soon'}</a></div></article>`;};
 const RVF=slug=>`<h3>Write a review</h3><form id="rvf" data-slug="${E(slug)}"><label for="rvr">Your rating</label><select id="rvr"><option value="5">★★★★★ 5 – Loved it</option><option value="4">★★★★☆ 4</option><option value="3">★★★☆☆ 3</option><option value="2">★★☆☆☆ 2</option><option value="1">★☆☆☆☆ 1</option></select><label for="rvn">Your name</label><input id="rvn" maxlength="40" autocomplete="name"><label for="rvt">Your review</label><textarea id="rvt" rows="4" maxlength="600" required></textarea><input id="rvw" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">Submit review</button><p id="rvm" class="note" role="status">Reviews are checked before they appear. Readers who bought this PDF here get a “Verified buyer” label.</p></form>`;
 const page=(html,status=200)=>new Response(html,{status,headers:{'content-type':'text/html; charset=utf-8','cache-control':'public, max-age=0, must-revalidate','netlify-cdn-cache-control':'public, max-age=60, stale-while-revalidate=300'}});
-export default async req=>{
- const q=new URL(req.url).searchParams,cat=q.get('cat')||'',slug=q.get('slug')||'';
+// Netlify routes these addresses straight to this function. preferStatic keeps every already-built page working as before.
+export const config={preferStatic:true,path:['/kids/:slug','/kids/:slug/','/cooking/:slug','/cooking/:slug/','/journals/:slug','/journals/:slug/','/novels/:slug','/novels/:slug/','/trading/:slug','/trading/:slug/']};
+export default async (req,context)=>{
+ const u=new URL(req.url),m=u.pathname.match(/^\/(kids|cooking|journals|novels|trading)\/([a-z0-9-]+)\/?$/);
+ // Netlify passes the ORIGINAL address to the function, so read the section and product from the path (the query is only a fallback).
+ const cat=m?m[1]:(u.searchParams.get('cat')||''),slug=m?m[2]:((context&&context.params&&context.params.slug)||u.searchParams.get('slug')||'');
  const c=await catalog(),p=Object.hasOwn(c,slug)?c[slug]:null;
+ if(p&&p.cat===cat&&!p.rec&&SH.cats[cat]){ // a built product: hand back its built page (safety net if Netlify ever routes it here)
+  try{const r=await fetch(new URL('/'+cat+'/'+slug+'/index.html',req.url));if(r.ok)return page(await r.text());}catch(e){}
+ }
  if(!p||p.cat!==cat||!p.rec||!SH.cats[cat])return page(head('Page not found','Page not found','home','',[],'',true)+'<main class="w"><div class="panel"><h1>Page not found</h1><p><a href="/">Back to the shop</a></p></div></main>'+SH.foot,404);
  const r=p.rec,ci=SH.cats[cat],rv=await reviewsFor(slug),av=rv.length?rv.reduce((a,x)=>a+x.rating,0)/rv.length:0,path=`${cat}/${slug}/`,img=p.cover?SH.site+'/api/cover?slug='+slug:(p.img?SH.site+'/covers/'+p.img:'');
  const pj={'@context':'https://schema.org','@type':'Product',name:r.title,description:r.short||r.title,brand:{'@type':'Brand',name:ci.name},offers:{'@type':'Offer',price:r.price,priceCurrency:'INR',availability:p.pdf?'https://schema.org/InStock':'https://schema.org/OutOfStock',url:SH.site+'/'+path}};

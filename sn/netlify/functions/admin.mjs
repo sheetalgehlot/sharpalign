@@ -56,7 +56,7 @@ export default async (req,context)=>{
  if(a==='delete'){const sl=String((await req.json()).slug),ap=await g('adm/products',[]);await s.setJSON('adm/products',ap.filter(x=>x.slug!==sl));
   if(Object.hasOwn(P,sl)){const rm=await g('adm/removed',[]);if(!rm.includes(sl))await s.setJSON('adm/removed',[...rm,sl]);}await mark();return json({ok:true});}
  if(a==='chunk'){const sl=q('slug'),i=parseInt(q('i')),n=parseInt(q('n')),size=parseInt(q('size')),buf=await req.arrayBuffer();
-  if(!SLUG.test(sl)||!(n>0&&n<=8)||!(i>=0&&i<n)||buf.byteLength>4.2e6)return json({error:'Bad upload (PDF must be under about 24 MB)'},400);
+  if(!SLUG.test(sl)||!(n>0&&n<=6)||!(i>=0&&i<n)||buf.byteLength>4.2e6)return json({error:'Bad upload (each PDF must be under about 18 MB)'},400);
   if(i===0&&Buffer.from(buf.slice(0,5)).toString()!=='%PDF-')return json({error:'That file is not a PDF'},400);
   await s.set(`pdf/${sl}/${i}`,buf);
   if(i===n-1){const pd=await g('adm/pdfs',{});pd[sl]={parts:n,size,t:Date.now()};await s.setJSON('adm/pdfs',pd);await mark();}
