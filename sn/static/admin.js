@@ -7,8 +7,7 @@ function login(){$('#nav').hidden=true;$('#bn').innerHTML='';
  $('#app').innerHTML='<div class="box"><h2>Log in</h2><input id="pw" type="password" placeholder="Admin password" autocomplete="current-password"><button id="go">Log in</button> <span id="lm" class="mu"></span></div><div class="box"><h2>Set or reset password</h2><p class="mu">First time, or forgot it? Choose a new password here. As the setup key, type your <b>TOKEN_SECRET</b> value from Netlify (the long random text you made up).</p><label>Setup key (TOKEN_SECRET)</label><input id="sk" type="password" autocomplete="off"><label>New password (6 or more characters)</label><input id="np" type="password" autocomplete="new-password"><button id="sp">Save password and log in</button> <span id="sm" class="mu"></span></div>';
  const go=async()=>{const r=await api('login',{password:$('#pw').value});r.ok?start():$('#lm').textContent=r.error||'Failed'};$('#go').onclick=go;$('#pw').onkeydown=e=>{if(e.key==='Enter')go()};
  $('#sp').onclick=async()=>{const r=await api('setpw',{key:$('#sk').value,password:$('#np').value});r.ok?start():$('#sm').textContent=r.error||'Failed'}}
-function banner(m){$('#bn').innerHTML=m.dirty?'<div class="warn">Changes are saved but not live yet. <button id="pub">Publish now</button> <span id="pm"></span></div>':'';
- if(m.dirty)$('#pub').onclick=async()=>{$('#pm').textContent='Publishing…';const r=await api('publish',{});$('#pm').textContent=r.ok?'Started. It goes live in about a minute.':(r.error||'Failed')}}
+function banner(m){$('#bn').innerHTML=''}
 const refresh=()=>api('me').then(banner).catch(()=>{});
 async function start(){await refresh();$('#nav').hidden=false;show(tab)}
 function show(t){tab=t;document.querySelectorAll('#nav [data-t]').forEach(b=>b.classList.toggle('on',b.dataset.t===t));({orders,products,reviews,credit,ranking,waitlist})[t]()}
@@ -26,7 +25,7 @@ async function products(){const r=await api('products');
  const rows=r.items.map(p=>`<div class="box"><b>${H(p.title)}</b> <small>${H(p.cat||'')} · ${inr(p.price)}</small><br><span class="chip ${p.pdf?'ok':'no'}">PDF ${p.pdf?'ready':'missing'}</span><span class="chip ${p.cover?'ok':''}">Cover ${p.cover?'uploaded':'none'}</span><span class="chip">${p.source==='file'?'from products.json':'admin'}</span>
  <p><button class="g" data-a="pick" data-k="pdf" data-s="${H(p.slug)}">Upload PDF</button> <button class="g" data-a="pick" data-k="cover" data-s="${H(p.slug)}">Upload cover</button>${p.rec?` <button class="g" data-a="edit" data-s="${H(p.slug)}">Edit</button>`:''} <button class="g r" data-a="del" data-s="${H(p.slug)}">Remove</button></p></div>`).join('');
  window._items=r.items;
- $('#app').innerHTML=`<div class="box"><h2 id="ft">Add a product</h2><form id="pf"><input type="hidden" name="slug">
+ $('#app').innerHTML=`<div class="box"><b>Live instantly.</b> Products, PDFs, covers and prices you save here go live right away. No publishing and no Netlify credits are needed.</div><div class="box"><h2 id="ft">Add a product</h2><form id="pf"><input type="hidden" name="slug">
  <label>Title</label><input name="title" required><label>Section</label><select name="cat">${CATS.map(c=>`<option>${c}</option>`).join('')}</select>
  <label>Price in rupees</label><input name="price" type="number" min="1" required><label>Number of pages</label><input name="pages" type="number" min="0">
  <label>Cover emoji (used when there is no cover image)</label><input name="emoji" maxlength="4" placeholder="📘"><label>Cover colour</label><input name="color" type="color" value="#3b82f6">

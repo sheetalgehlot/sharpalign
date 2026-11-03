@@ -7,6 +7,11 @@ E = lambda s: html.escape(str(s), quote=True)
 INR = lambda n: '₹{:,}'.format(int(n))
 load = lambda f, d: json.load(open(f, encoding='utf-8')) if os.path.isfile(f) else d
 CAMP = load('campaign.json', {'enabled': False})
+import re as _re
+ADMIN_PATH = str(load('admin.json', {'path': 'admin'}).get('path', 'admin')).strip('/ ')
+if not _re.fullmatch(r'[a-z0-9-]{4,40}', ADMIN_PATH): raise SystemExit('admin.json: "path" must be 4-40 lowercase letters, numbers or dashes')
+FAV = '<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="apple-touch-icon" href="/apple-touch-icon.png">'
+VERIFY = '<meta name="google-site-verification" content="4OWIA6uXwCPAwnlCH-6DOGCC58_7IFrwTYMBWW9ciGA">'
 IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 _ms = lambda x: int(datetime.datetime.fromisoformat(x).timestamp() * 1000)
 _dd = lambda ms: datetime.datetime.fromtimestamp(ms / 1000, tz=IST).strftime('%d %b %Y').lstrip('0')
@@ -52,8 +57,8 @@ def write(path, s):
     path = os.path.join('dist', path.lstrip('/')); os.makedirs(os.path.dirname(path), exist_ok=True); open(path, 'w', encoding='utf-8').write(s)
 # data for the serverless functions
 os.makedirs('netlify/functions', exist_ok=True)
-open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'campaign': CP, **{k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}}) + ';\n')
-open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf'], 'cat': p['cat']} for p in products}, ensure_ascii=False) + ';\n')
+open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'campaign': CP, 'admin_path': ADMIN_PATH, **{k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}}) + ';\n')
+open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf'], 'cat': p['cat'], 'short': p.get('short', ''), 'emoji': p.get('emoji', '📘'), 'color': p.get('color', '#3b82f6'), 'added': p.get('added', ''), 'img': p['img']} for p in products}, ensure_ascii=False) + ';\n')
 
 stars = lambda n: '★' * int(round(n)) + '☆' * (5 - int(round(n)))
 rv = lambda s: [r for r in reviews if r['slug'] == s]
@@ -66,7 +71,7 @@ def head(title, desc, theme, path='', ld=(), img='', noindex=False):
     u = SITE + '/' + path.lstrip('/')
     nav = ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items())
     return ('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-      '<meta name="google-site-verification" content="4OWIA6uXwCPAwnlCH-6DOGCC58_7IFrwTYMBWW9ciGA">'
+      + VERIFY + FAV +
       '<title>%s</title><meta name="description" content="%s"><link rel="canonical" href="%s">%s'
       '<meta property="og:title" content="%s"><meta property="og:description" content="%s"><meta property="og:type" content="website"><meta property="og:url" content="%s"><meta property="og:site_name" content="Sharpalign">%s'
       '<link rel="stylesheet" href="%s"><link rel="stylesheet" href="/assets/style.css"><script src="/assets/site.js" defer></script>%s%s</head>'
@@ -84,7 +89,7 @@ def cvparts(p):
     return '', '%s<small>%s</small>' % (E(p['emoji']), E(p['title']))
 def card(p):
     r = rv(p['slug']); cls, inner = cvparts(p)
-    s = '<article class="card"><a class="cv%s" href="%s" style="background:%s"%s tabindex="-1">%s</a>' % (cls, href(p), E(p['color']), '' if p['img'] else ' aria-hidden="true"', inner)
+    s = '<article class="card" data-slug="%s"><a class="cv%s" href="%s" style="background:%s"%s tabindex="-1">%s</a>' % (E(p['slug']), cls, href(p), E(p['color']), '' if p['img'] else ' aria-hidden="true"', inner)
     s += '<h3><a href="%s">%s</a></h3><p>%s</p>' % (href(p), E(p['title']), E(p['short']))
     if r: s += '<div class="rate"><span class="stars" aria-label="%.1f out of 5">%s</span> (%d)</div>' % (avg(r), stars(avg(r)), len(r))
     return s + '<div class="row"><span class="pr" data-cat="%s" data-price="%d">%s</span><a class="buy" href="%s">%s</a></div></article>' % (p['cat'], int(p['price']), INR(p['price']), href(p), 'View PDF' if p['pdf'] else 'Coming soon')
@@ -127,8 +132,9 @@ for p in products:
     bc = {'@context': 'https://schema.org', '@type': 'BreadcrumbList', 'itemListElement': [{'@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': SITE + '/'}, {'@type': 'ListItem', 'position': 2, 'name': c['short'], 'item': '%s/%s/' % (SITE, p['cat'])}, {'@type': 'ListItem', 'position': 3, 'name': p['title']}]}
     cls, inner = cvparts(p)
     rate = '<p class="rate"><span class="stars" aria-label="%.1f out of 5">%s</span> %.1f (%d review%s) · <a href="#reviews">Write a review</a></p>' % (a, stars(a), a, len(r), 's' if len(r) > 1 else '') if r else '<p class="rate note">No reviews yet. <a href="#reviews">Be the first to review</a></p>'
-    buy = ('<div id="buybox"><label for="buyer">Your email (we send the PDF link here)</label><input id="buyer" type="email" autocomplete="email" placeholder="you@example.com"><button class="cta" data-buy="%s">Buy now · %s</button><p id="msg" class="note" role="status"></p><p class="note">Secure payment by Razorpay: UPI, cards, net banking and wallets. After paying you return to our site and your download opens right away.</p><script src="https://checkout.razorpay.com/v1/checkout.js"></script></div>' % (E(p['slug']), INR(p['price']))) if p['pdf'] else '<p class="note">This PDF is coming soon.</p>'
+    buy = ('<div id="buybox" hidden><label for="buyer">Your email (we send the PDF link here)</label><input id="buyer" type="email" autocomplete="email" placeholder="you@example.com"><button class="cta" data-buy="%s">Buy now · %s</button><p id="msg" class="note" role="status"></p><p class="note">Secure payment by Razorpay: UPI, cards, net banking and wallets. After paying you return to our site and your download opens right away.</p><script src="https://checkout.razorpay.com/v1/checkout.js"></script></div>' % (E(p['slug']), INR(p['price'])))
     revs = ''.join('<div class="rev"><span class="stars">%s</span> <b>%s</b>%s<p>%s</p></div>' % (stars(x['rating']), E(x['name']), ' <small>Verified buyer</small>' if x.get('verified') else '', E(x['text'])) for x in r) or '<p>No reviews yet.</p>'
+    revs = '<div id="revlist" data-slug="%s">%s</div>' % (E(p['slug']), revs)
     rel = [x for x in products if x['cat'] == p['cat'] and x['slug'] != p['slug']][:3]
     write(path + 'index.html', head('%s (PDF) | %s' % (p['title'], c['name']), p['short'], p['cat'], path, [pj, bc], img)
       + '<main class="w"><p class="crumbs"><a href="/">Home</a> / <a href="/%s/">%s</a> / %s</p><div class="prod"><div class="cv big%s" style="background:%s"%s>%s</div><div class="panel"><h1>%s</h1>%s<p class="pr big" id="price">%s</p><div id="offers"></div><div id="soon"></div><p>%s</p>%s</div></div>' % (
@@ -166,7 +172,8 @@ write('credit/index.html', app('My referral credit', 'credit.js', 'credit/'))
 write('404.html', head('Page not found', 'Page not found', 'home', noindex=True) + '<main class="w"><div class="panel"><h1>Page not found</h1><p><a href="/">Back to the shop</a></p></div></main>' + FOOT)
 today = datetime.date.today().isoformat()
 urls = [('', today), ('refer/', today), ('leaderboard/', today)] + [(k + '/', today) for k in CATS] + [(href(p).lstrip('/'), p.get('added', today)) for p in products if p['pdf']]
-write('sitemap.xml', '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + ''.join('<url><loc>%s/%s</loc><lastmod>%s</lastmod></url>' % (SITE, u, d) for u, d in urls) + '</urlset>')
-write('robots.txt', 'User-agent: *\nDisallow: /thank-you/\nDisallow: /credit/\nDisallow: /api/\nDisallow: /admin/\nSitemap: %s/sitemap.xml\n' % SITE)
-os.makedirs('dist/admin', exist_ok=True); shutil.move('dist/assets/admin.html', 'dist/admin/index.html')
+write('robots.txt', 'User-agent: *\nDisallow: /thank-you/\nDisallow: /credit/\nDisallow: /api/\nSitemap: %s/sitemap.xml\n' % SITE)
+os.makedirs('dist/' + ADMIN_PATH, exist_ok=True); shutil.move('dist/assets/admin.html', 'dist/%s/index.html' % ADMIN_PATH)
+for _f in ('favicon.svg', 'favicon.ico', 'apple-touch-icon.png'): shutil.copy('static/' + _f, 'dist/' + _f)
+open('netlify/functions/_shell.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'site': SITE, 'fonts': FONTS, 'campjs': CAMPJS, 'nav': ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items()), 'foot': FOOT, 'fav': FAV, 'verify': VERIFY, 'cats': {k: {'name': c['name'], 'short': c['short']} for k, c in CATS.items()}, 'disc': disc('trading'), 'leaderboard': bool(CP['enabled'])}, ensure_ascii=False) + ';\n')
 print('Built %d products, %d pages' % (len(products), 1 + len(CATS) + len(products) + len(PG) + 3))

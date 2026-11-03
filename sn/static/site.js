@@ -27,9 +27,11 @@ const render=()=>{if(!C)return;const l=live(),nx=Object.entries(P).filter(([c,f]
  document.querySelectorAll('.sa-t[data-to]').forEach(e=>e.textContent=T(+e.dataset.to))};
 if(C){render();setInterval(render,1000)}
 // ---- cards ----
-document.querySelectorAll('.pr[data-price]').forEach(e=>{const c=e.dataset.cat,f=P[c],x=st(c),p0=+e.dataset.price;if(!f)return;
+const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const decorate=()=>document.querySelectorAll('.pr[data-price]').forEach(e=>{const c=e.dataset.cat,f=P[c],x=st(c),p0=+e.dataset.price;if(!f)return;
  if(x==='soon'){const b=e.parentNode.querySelector('.buy');if(b)b.textContent='Opens '+dt(f.open)}
  else if(x==='launch'&&!f.waitlist_required){let v=p0;if(f.launch_price)v=Math.min(v,f.launch_price);if(f.discount_pct)v=Math.min(v,Math.floor(p0*(100-f.discount_pct)/100));if(v<p0)e.innerHTML=inr(v)+' <s>'+inr(p0)+'</s>'}});
+decorate();
 // ---- waitlist / notify forms ----
 const cat=((document.body.className.match(/\bt-(\w+)/)||[])[1]),f0=P[cat],soonEl=document.getElementById('soon'),box=document.getElementById('buybox');
 const wlForm=(c,f)=>'<form class="wl" data-cat="'+c+'"><label>'+(f.waitlist_required?'Join the waitlist. Only waitlist members get the launch price.':'Get an email when it opens')+'</label><input type="email" required placeholder="you@example.com" autocomplete="email"><input class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">'+(f.waitlist_required?'Join waitlist':'Notify me')+'</button><p class="note wm" role="status"></p></form>';
@@ -38,10 +40,25 @@ const gate=()=>{if(!soonEl||!f0)return;const x=st(cat);
  else if(x==='launch'&&f0.waitlist_required)soonEl.innerHTML='<div class="offer">🎁 Waitlist launch price ends in <b class="sa-t" data-to="'+f0.end+'"></b>. It is only for people who joined the waitlist before launch.</div>';
  else if(x==='launch'&&f0.end>f0.open)soonEl.innerHTML='<div class="offer">🎉 Launch offer: '+offer(f0)+' · ends in <b class="sa-t" data-to="'+f0.end+'"></b></div>'};
 gate();
+// products added in the admin page appear here instantly (no site rebuild)
+const pcard=p=>{const h='/'+p.cat+'/'+p.slug+'/',img=p.cover?'<img src="/api/cover?slug='+p.slug+'" alt="Cover of '+esc(p.title)+'" loading="lazy" width="600" height="800">':'';
+ return '<article class="card" data-slug="'+p.slug+'"><a class="cv'+(img?' img':'')+'" href="'+h+'" style="background:'+esc(p.color||'#3b82f6')+'" tabindex="-1">'+(img||esc(p.emoji||'📘')+'<small>'+esc(p.title)+'</small>')+'</a><h3><a href="'+h+'">'+esc(p.title)+'</a></h3><p>'+esc(p.short||'')+'</p><div class="row"><span class="pr" data-cat="'+p.cat+'" data-price="'+p.price+'">'+inr(p.price)+'</span><a class="buy" href="'+h+'">'+(p.pdf?'View PDF':'Coming soon')+'</a></div></article>'};
+const grid=document.querySelector('#shop .grid')||document.querySelector('.tiles ~ .grid');
+if(grid)fetch('/api/products').then(r=>r.json()).then(d=>{
+ const here=cat&&cat!=='home'?cat:'',live=new Set(d.live||[]);
+ grid.querySelectorAll('[data-slug]').forEach(a=>{const sl=a.dataset.slug;if(!live.has(sl)){a.remove();return}const f=(d.flags||{})[sl],b=a.querySelector('.buy');if(f&&f.pdf&&b&&/Coming soon/.test(b.textContent))b.textContent='View PDF'});
+ const have=new Set([...grid.querySelectorAll('[data-slug]')].map(a=>a.dataset.slug));
+ const fresh=(d.items||[]).filter(p=>!have.has(p.slug)&&(!here||p.cat===here)).sort((a,b)=>String(b.added).localeCompare(String(a.added)));
+ if(fresh.length){fresh.forEach(p=>grid.insertAdjacentHTML(here?'beforeend':'afterbegin',pcard(p)));if(!here)while(grid.children.length>6)grid.lastElementChild.remove()}
+ const none=document.querySelector('#shop > p.panel');if(none&&grid.children.length)none.remove();
+ decorate()}).catch(()=>{});
 document.addEventListener('submit',async e=>{const w=e.target.closest('.wl');if(!w)return;e.preventDefault();const m=w.querySelector('.wm'),b=w.querySelector('button');b.disabled=true;m.textContent='Saving…';
  try{const x=await (await fetch('/api/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:w.querySelector('input[type=email]').value,cat:w.dataset.cat,website:w.querySelector('.hp').value})})).json();
  if(x.ok)w.innerHTML='<p><b>You are on the list ✓</b> We will email you when it opens.</p>';else{m.textContent=x.error||'Could not save. Please try again.';b.disabled=false}}catch(y){m.textContent='Could not save. Please try again.';b.disabled=false}});
 const r=new URLSearchParams(location.search).get('ref');if(r&&/^[A-Fa-f0-9]{8}$/.test(r))s('sa_ref',r.toUpperCase());
+// ---- live reviews ----
+const rl=document.getElementById('revlist');
+if(rl)fetch('/api/reviews?slug='+encodeURIComponent(rl.dataset.slug)).then(r=>r.json()).then(d=>{if(d.items&&d.items.length)rl.innerHTML=d.items.map(x=>'<div class="rev"><span class="stars">'+'★'.repeat(x.rating)+'☆'.repeat(5-x.rating)+'</span> <b>'+esc(x.name)+'</b>'+(x.verified?' <small>Verified buyer</small>':'')+'<p>'+esc(x.text)+'</p></div>').join('')}).catch(()=>{});
 // ---- review form ----
 const rf=document.getElementById('rvf');
 if(rf)rf.addEventListener('submit',async e=>{e.preventDefault();const m=document.getElementById('rvm'),b=rf.querySelector('button');b.disabled=true;m.textContent='Sending…';
@@ -56,8 +73,10 @@ if(jf)jf.addEventListener('submit',async e=>{e.preventDefault();const m=document
 const btn=document.querySelector('[data-buy]');if(!btn)return;
 const msg=document.getElementById('msg'),slug=btn.dataset.buy,buyer=document.getElementById('buyer');
 const load=email=>fetch('/api/quote?slug='+slug+'&ref='+g('sa_ref')+'&ck='+g('sa_ck')+(email?'&email='+encodeURIComponent(email):'')).then(x=>x.json()).then(q=>{
- if(q.pay==null)return;
+ if(q.pay==null){if(box)box.hidden=true;if(soonEl)soonEl.innerHTML='<div class="offer">This PDF is no longer available.</div>';return}
  if(q.locked){if(box)box.hidden=true;return}
+ if(!q.avail){if(box)box.hidden=true;if(soonEl&&st(cat)!=='soon')soonEl.innerHTML='<div class="offer">This PDF is coming soon.</div>';return}
+ if(box)box.hidden=false;
  if(box&&st(cat)==='soon'){box.hidden=false;soonEl.innerHTML='<div class="offer">🏅 Early access for members: you can buy before the public launch.</div>'}
  document.getElementById('price').innerHTML=q.pay<q.price?inr(q.pay)+' <s>'+inr(q.price)+'</s>':inr(q.price);
  btn.textContent='Buy now · '+inr(q.pay);

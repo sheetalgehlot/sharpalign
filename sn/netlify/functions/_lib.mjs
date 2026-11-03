@@ -10,6 +10,19 @@ const sec=()=>{const s=env('TOKEN_SECRET');if(s.length<16)throw new Error('Set T
 const hmac=(k,m)=>createHmac('sha256',k).update(m).digest('hex');
 const safe=(a,b)=>{const x=Buffer.from(String(a)),y=Buffer.from(String(b));return x.length===y.length&&timingSafeEqual(x,y);};
 export const product=s=>Object.hasOwn(P,s)?P[s]:null;
+// Live product list = products built into the site + everything saved in the admin page. No rebuild needed.
+let CATC=null,CATT=0;
+export const bust=()=>{CATC=null;};
+export async function catalog(){
+ if(CATC&&Date.now()-CATT<15000)return CATC;
+ const s=store(),g=async(k,d)=>(await s.get(k,{type:'json'}))||d;
+ const [ap,pd,cv,rm]=await Promise.all([g('adm/products',[]),g('adm/pdfs',{}),g('adm/covers',{}),g('adm/removed',[])]);
+ const out={};
+ for(const [k,v] of Object.entries(P)){if(rm.includes(k))continue;out[k]={...v,pdf:!!(v.pdf||pd[k]),cover:!!cv[k],source:'file'};}
+ for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,cat:p.cat,short:p.short,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin'};}
+ CATC=out;CATT=Date.now();return out;}
+export const productA=async s=>{const c=await catalog();return Object.hasOwn(c,s)?c[s]:null;};
+export async function reviewsFor(slug){const s=store(),out=[];for(const b of (await s.list({prefix:'rv/'})).blobs){const r=await s.get(b.key,{type:'json'});if(r&&r.status==='approved'&&(!slug||r.slug===slug))out.push({slug:r.slug,name:r.name,rating:r.rating,text:r.text,date:r.date,verified:!!r.verified});}return out;}
 export const rcode=em=>hmac(sec(),'c'+em.trim().toLowerCase()).slice(0,8).toUpperCase();
 export const rkey=c=>c+hmac(sec(),'k'+c).slice(0,16);
 export const keyCode=k=>{k=String(k||'');const c=k.slice(0,8);return /^[A-F0-9]{8}$/.test(c)&&safe(rkey(c),k)?c:'';};
@@ -41,7 +54,7 @@ export async function board(force){
 export async function quote(p,email,ref,ck){
  const now=Date.now(),f=phase(p.cat),cc=keyCode(ck),rk=cc?await getRef(cc):null,re=email?await getRef(rcode(email)):null;
  const perk=hasPerk(rk)||hasPerk(re),unl=unlockOn(rk)||unlockOn(re);
- const q={price:p.price,base:p.price,tag:'',fd:0,credit:0,ref:'',cr:'',pay:p.price,state:stateOf(p.cat,now),locked:false,wl:false};
+ const q={price:p.price,base:p.price,tag:'',fd:0,credit:0,ref:'',cr:'',pay:p.price,state:stateOf(p.cat,now),locked:false,wl:false,avail:!!p.pdf};
  const early=((CP.perks||{}).early_hours||0)*36e5;
  if(q.state==='soon'){if(perk&&f&&now>=f.open-early)q.state='launch';else{q.locked=true;return q;}}
  let base=p.price,tag='';
@@ -81,7 +94,7 @@ async function ledger(oid,em,o,n,origin){
 export async function fulfil(oid,origin){
  const o=await rzp('GET','orders/'+encodeURIComponent(oid));
  if(o.status!=='paid')return null;
- const n=o.notes||{},p=product(n.slug||''),em=String(n.email||'').toLowerCase();
+ const n=o.notes||{},p=await productA(n.slug||''),em=String(n.email||'').toLowerCase();
  if(!p||!em)return null;
  const tok=mkToken(oid,n.slug,(o.created_at||0)*1000),s=store(),k='order/'+oid;
  if(await s.get(k,{type:'json'}))return tok;

@@ -26,8 +26,11 @@ Buy now > Razorpay window > payment > Razorpay returns the buyer to `/api/paymen
 9. **Google:** add the site in Search Console and submit `https://sharpalign.com/sitemap.xml`.
 10. **Live:** finish Razorpay KYC, switch to Live keys, update the Netlify variables and the webhook, redeploy, and make one small real purchase.
 
+## Products go live instantly (no deploy, no credits)
+Products, prices, descriptions, covers and PDFs you save in the admin page are live at once: the product page, checkout, My Library, the sitemap and the shop lists all read them live. You never need to press Publish or deploy to sell a new PDF. A deploy (15 Netlify credits) is only needed when you change code files, `config.json`, `campaign.json`, `admin.json` or `products.json`. Any later deploy also bakes the admin products into the built pages.
+
 ## Admin page (your own password-protected dashboard)
-Open `https://sharpalign.com/admin/` and log in with `ADMIN_PASSWORD`.
+Open your private admin address (the `path` in `admin.json`, for example `https://sharpalign.shop/studio-xxxxxxxx/`; change it any time by editing that file and deploying). It is not linked anywhere on the site and is hidden from Google. The first time (or if you forget it), use the box **Set or reset password**: type your `TOKEN_SECRET` value as the setup key and choose a password of 6 or more characters. It is saved by the site itself, so no Netlify setting or redeploy is needed. Use **Change password** inside the admin page any time. After 10 wrong tries a visitor is paused for an hour.
 - **Orders:** every sale. Resend a buyer's download email, or reset their download count.
 - **Products:** add a product, upload its PDF (up to about 24 MB) and a cover image (it is cropped to 600 x 800 for you), edit or remove products.
 - **Reviews:** approve or reject buyer reviews. Only approved reviews appear on the site.

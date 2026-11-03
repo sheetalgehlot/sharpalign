@@ -1,9 +1,9 @@
 import {createHash} from 'node:crypto';
-import {json,store,env,mail,P,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
+import {json,store,env,mail,P,catalog,bust,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
 const SLUG=/^[a-z0-9-]{1,80}$/,CATS=['kids','cooking','journals','novels','trading'];
 export default async (req,context)=>{
  const u=new URL(req.url),a=u.searchParams.get('a')||'',q=k=>u.searchParams.get(k)||'',s=store(),origin=u.origin;
- const g=async(k,d)=>(await s.get(k,{type:'json'}))||d,mark=()=>s.setJSON('adm/dirty',{v:true});
+ const g=async(k,d)=>(await s.get(k,{type:'json'}))||d,mark=async()=>{bust();};
  const all=async p=>{const o=[];for(const b of (await s.list({prefix:p})).blobs.slice(0,300))o.push([b.key,await g(b.key,null)]);return o;};
  const tries=async()=>{const ip=(context&&context.ip)||req.headers.get('x-nf-client-connection-ip')||'?',k='rl/a'+createHash('sha256').update(ip+new Date().toISOString().slice(0,13)).digest('hex').slice(0,22);return {k,c:((await s.get(k,{type:'json'}))||{c:0}).c};};
  const ck=(v)=>new Response('{"ok":true}',{headers:{'content-type':'application/json','set-cookie':'adm='+v+'; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age='+(v?43200:0)}});
@@ -21,11 +21,12 @@ export default async (req,context)=>{
  if(a==='logout')return ck('');
  if(!isAdmin(req))return json({error:'login'},401);
  if(req.method!=='GET'&&req.headers.get('x-admin')!=='1')return json({error:'bad request'},400);
+ const CAT=await catalog();
  if(a==='chpw'){const pw=String((await req.json().catch(()=>({}))).password||'').trim();if(pw.length<PW_MIN)return json({error:'Use at least '+PW_MIN+' characters.'},400);await s.setJSON('adm/pw',hashPw(pw));return json({ok:true});}
- if(a==='me')return json({ok:true,dirty:!!(await g('adm/dirty',null))?.v});
- if(a==='orders'){const o=(await all('order/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(6),email:r.email,title:P[r.slug]?.title||r.slug,t:r.t,dl:r.dl}));o.sort((x,y)=>y.t-x.t);return json({items:o.slice(0,100)});}
+ if(a==='me')return json({ok:true,dirty:false});
+ if(a==='orders'){const o=(await all('order/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(6),email:r.email,title:CAT[r.slug]?.title||r.slug,t:r.t,dl:r.dl}));o.sort((x,y)=>y.t-x.t);return json({items:o.slice(0,100)});}
  if(a==='resend'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);
-  await mail(r.email,'Your PDF link: '+(P[r.slug]?.title||r.slug),`Here is your download link again:\n${origin}/thank-you/?t=${mkToken(b.oid,r.slug,Date.now())}\n\nThe link works for ${CFG.link_days} days.\n\nSharpalign`);return json({ok:true});}
+  await mail(r.email,'Your PDF link: '+(CAT[r.slug]?.title||r.slug),`Here is your download link again:\n${origin}/thank-you/?t=${mkToken(b.oid,r.slug,Date.now())}\n\nThe link works for ${CFG.link_days} days.\n\nSharpalign`);return json({ok:true});}
  if(a==='resetdl'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);r.dl=0;await s.setJSON('order/'+b.oid,r);return json({ok:true});}
  if(a==='credit'){const o=(await all('ref/')).filter(x=>x[1]).map(([k,r])=>{const [b,p]=balance(r);return {code:k.slice(4),email:r.email,avail:b,pending:p,earned:r.ledger.reduce((n,x)=>n+(x.type==='earn'?x.amt:0),0),refs:(r.refs||[]).length,unlock:r.unlock||null};});return json({items:o});}
  if(a==='adjust'){const b=await req.json(),k='ref/'+String(b.code).toUpperCase(),r=await g(k,null),amt=parseInt(b.amt);if(!r||!amt)return json({error:'Check the code and amount'},400);r.ledger.push({t:Date.now(),type:'adj',amt});await s.setJSON(k,r);return json({ok:true});}
@@ -42,17 +43,14 @@ export default async (req,context)=>{
   let i=0;for(const {k,r} of rows){i++;r.top=i<=(pk.top_free||10)?'top10':'top100';r.rank=i;await s.setJSON(k,r);
    await mail(r.email,'You made the Sharpalign Top '+(i<=(pk.top_free||10)?'10':'100')+'!','Congratulations! You finished at rank #'+i+' in our referral ranking.\n\nYour perks: '+pk.discount_pct+'% off any PDF, early access to new launches'+(r.top==='top10'?', and free access to new launches':'')+'. Open your private page to see them: '+origin+'/credit/#'+rkey(k.slice(4))+'\n\nWe will contact you about any prize.\n\nSharpalign');}
   await s.setJSON('meta/finalized',{t:Date.now(),count:rows.length});return json({ok:true,count:rows.length});}
- if(a==='reviews'){return json({items:(await all('rv/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(3),title:P[r.slug]?.title||r.slug,...r,status:r.status||'pending'}))});}
+ if(a==='reviews'){return json({items:(await all('rv/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(3),title:CAT[r.slug]?.title||r.slug,...r,status:r.status||'pending'}))});}
  if(a==='reviewset'){const b=await req.json(),k='rv/'+b.oid,r=await g(k,null);if(!r)return json({error:'Not found'},404);r.status=['approved','rejected'].includes(b.status)?b.status:'pending';await s.setJSON(k,r);await mark();return json({ok:true});}
- if(a==='products'){const ap=await g('adm/products',[]),pd=await g('adm/pdfs',{}),cv=await g('adm/covers',{}),rm=await g('adm/removed',[]),seen=new Set(),items=[];
-  for(const p of ap){seen.add(p.slug);items.push({slug:p.slug,title:p.title,cat:p.cat,price:p.price,source:'admin',pdf:!!pd[p.slug],cover:!!cv[p.slug],rec:p});}
-  for(const [sl,p] of Object.entries(P)){if(seen.has(sl)||rm.includes(sl))continue;items.push({slug:sl,title:p.title,price:p.price,source:'file',pdf:!!pd[sl]||p.pdf,cover:!!cv[sl]});}
-  return json({items});}
+ if(a==='products'){return json({items:Object.entries(CAT).map(([sl,p])=>({slug:sl,title:p.title,cat:p.cat,price:p.price,source:p.source,pdf:!!p.pdf,cover:!!p.cover,rec:p.rec||null}))});}
  if(a==='save'){const b=await req.json(),title=String(b.title||'').trim().slice(0,120),cat=String(b.cat),price=parseInt(b.price);
   const slug=String(b.slug||'')||title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
   if(!title||!CATS.includes(cat)||!(price>0)||!SLUG.test(slug))return json({error:'Please fill title, section and price.'},400);
   const ap=await g('adm/products',[]),old=ap.find(x=>x.slug===slug);
-  if(!b.slug&&(old||Object.hasOwn(P,slug)))return json({error:'A product with this title already exists.'},400);
+  if(!b.slug&&(old||Object.hasOwn(CAT,slug)))return json({error:'A product with this title already exists.'},400);
   const rec={slug,cat,title,price,pages:parseInt(b.pages)||0,emoji:String(b.emoji||'📘').slice(0,4),color:/^#[0-9a-f]{6}$/i.test(b.color)?b.color:'#3b82f6',short:String(b.short||'').slice(0,160),desc:String(b.desc||'').slice(0,4000),added:old?.added||new Date().toISOString().slice(0,10)};
   await s.setJSON('adm/products',[...ap.filter(x=>x.slug!==slug),rec]);await mark();return json({slug});}
  if(a==='delete'){const sl=String((await req.json()).slug),ap=await g('adm/products',[]);await s.setJSON('adm/products',ap.filter(x=>x.slug!==sl));

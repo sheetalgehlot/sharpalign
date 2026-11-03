@@ -1,4 +1,4 @@
-import {readToken,store,keyCode,getRef,P,CFG} from './_lib.mjs';
+import {readToken,store,keyCode,getRef,catalog,CFG} from './_lib.mjs';
 import {createReadStream,existsSync,statSync} from 'node:fs';
 import {Readable} from 'node:stream';
 import path from 'node:path';
@@ -17,7 +17,7 @@ export default async req=>{
  const u=new URL(req.url).searchParams,s=store();
  if(u.get('k')){ // My Library: any time, always the latest version
   const c=keyCode(u.get('k')),r=c?await getRef(c):null,sl=String(u.get('slug')||'');
-  const ok=r&&/^[a-z0-9-]+$/.test(sl)&&((r.bought||[]).some(b=>b.slug===sl)||(r.top==='top10'&&P[sl]&&P[sl].pdf));
+  const cat=await catalog(),ok=r&&/^[a-z0-9-]+$/.test(sl)&&((r.bought||[]).some(b=>b.slug===sl)||(r.top==='top10'&&cat[sl]&&cat[sl].pdf));
   if(!ok)return new Response('Not available for this account.',{status:403});
   return serve(sl,s,async()=>{});
  }
