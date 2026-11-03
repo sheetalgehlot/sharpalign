@@ -14,25 +14,3 @@
   from = "/sitemap.xml"
   to = "/.netlify/functions/sitemap"
   status = 200
-
-# Products added in the admin page open instantly. These rules only apply when no built page exists for the address.
-[[redirects]]
-  from = "/kids/:slug"
-  to = "/.netlify/functions/product-page?cat=kids&slug=:slug"
-  status = 200
-[[redirects]]
-  from = "/cooking/:slug"
-  to = "/.netlify/functions/product-page?cat=cooking&slug=:slug"
-  status = 200
-[[redirects]]
-  from = "/journals/:slug"
-  to = "/.netlify/functions/product-page?cat=journals&slug=:slug"
-  status = 200
-[[redirects]]
-  from = "/novels/:slug"
-  to = "/.netlify/functions/product-page?cat=novels&slug=:slug"
-  status = 200
-[[redirects]]
-  from = "/trading/:slug"
-  to = "/.netlify/functions/product-page?cat=trading&slug=:slug"
-  status = 200
