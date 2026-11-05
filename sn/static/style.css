@@ -140,3 +140,13 @@ s{opacity:.6;font-size:.6em}
 .phs{display:grid;gap:10px}.ph{display:grid;gap:2px;border-left:5px solid var(--ac);padding:8px 12px;background:var(--bg);border-radius:6px}
 .ph b{font:800 20px var(--hd)}.ph span,.ph em{color:var(--mu);font-style:normal}
 .wl{position:relative;margin:10px 0}.lb{width:100%;border-collapse:collapse}.lb th,.lb td{padding:8px;border-bottom:1px solid var(--ln);text-align:left}
+/* whole card is clickable; compact descriptions; questions */
+.card{transition:box-shadow .15s}.card:hover{box-shadow:0 8px 22px rgba(0,0,0,.18)}
+.card h3 a::after{content:"";position:absolute;inset:0;z-index:1}
+.card .buy{position:relative;z-index:2}
+.card p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cols{columns:150px;column-gap:18px;margin:6px 0;padding-left:18px}.cols li{break-inside:avoid;margin:2px 0;font-size:15px}
+.desc.clamp{max-height:15em;overflow:hidden;position:relative}.desc.clamp.open{max-height:none}
+.desc.clamp:not(.open)::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4em;background:linear-gradient(transparent,var(--sf))}
+.more{background:none;border:0;color:var(--ac);font:700 15px var(--body);cursor:pointer;padding:8px 0}
+details{border-top:1px solid var(--ln);padding:10px 0}details:first-of-type{border-top:0}summary{cursor:pointer;font-weight:700}details p{margin:8px 0 0;color:var(--mu)}

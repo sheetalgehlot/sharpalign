@@ -22,14 +22,14 @@ async function waitlist(){const r=await api('waitlist'),cs={};r.items.forEach(e=
  $('#app').innerHTML='<div class="box"><b>Waitlist</b><br>'+(Object.keys(cs).length?Object.entries(cs).map(([c,v])=>H(c)+': '+v.n+' emails ('+v.sent+' notified)').join('<br>'):'No emails yet.')+'<p><button class="g" data-a="csv">Download CSV</button></p></div>'
  +'<div class="box"><h2>Send a launch email</h2><label>Section</label><select id="nc">'+CATS.map(c=>'<option>'+c+'</option>').join('')+'</select><label>Subject</label><input id="ns"><label>Message (include your launch link and the offer)</label><textarea id="nb" rows="6"></textarea><button data-a="notify">Send to the next 80 not yet notified</button> <span id="nm" class="mu"></span><p class="mu">Brevo free plan allows about 300 emails a day. Press again for the next batch.</p></div>';window._wl=r.items}
 async function products(){const r=await api('products');
- const rows=r.items.map(p=>`<div class="box"><b>${H(p.title)}</b> <small>${H(p.cat||'')} · ${inr(p.price)}</small><br><span class="chip ${p.pdf?'ok':'no'}">PDF ${p.pdf?'ready':'missing'}</span><span class="chip ${p.cover?'ok':''}">Cover ${p.cover?'uploaded':'none'}</span><span class="chip">${p.source==='file'?'from products.json':'admin'}</span>
- <p><button class="g" data-a="pick" data-k="pdf" data-s="${H(p.slug)}">Upload PDF</button> <button class="g" data-a="pick" data-k="cover" data-s="${H(p.slug)}">Upload cover</button>${p.rec?` <button class="g" data-a="edit" data-s="${H(p.slug)}">Edit</button>`:''} <button class="g r" data-a="del" data-s="${H(p.slug)}">Remove</button></p></div>`).join('');
+ const rows=r.items.map(p=>`<div class="box"><b>${H(p.title)}</b> <small>${H(p.cat||'')} · ${inr(p.price)}</small><br><span class="chip ${p.pdf?'ok':'no'}">PDF ${p.pdf?'ready'+(p.pdfmeta?' · '+(p.pdfmeta.size/1048576).toFixed(1)+' MB':''):'missing'}</span><span class="chip ${p.cover?'ok':''}">Cover ${p.cover?'uploaded':'none'}</span><span class="chip">${p.source==='file'?'from products.json':'admin'}</span>
+ <p>${p.pdf?`<button class="g" data-a="openpdf" data-s="${H(p.slug)}">Open PDF</button> `:''}<button class="g" data-a="openpage" data-u="/${H(p.cat||'')}/${H(p.slug)}/">View page</button> <button class="g" data-a="pick" data-k="pdf" data-s="${H(p.slug)}">Upload PDF</button> <button class="g" data-a="pick" data-k="cover" data-s="${H(p.slug)}">Upload cover</button>${p.rec?` <button class="g" data-a="edit" data-s="${H(p.slug)}">Edit</button>`:''} <button class="g r" data-a="del" data-s="${H(p.slug)}">Remove</button></p></div>`).join('');
  window._items=r.items;
- $('#app').innerHTML=`<div class="box"><b>Live instantly.</b> Products, PDFs, covers and prices you save here go live right away. No publishing and no Netlify credits are needed.</div><div class="box"><h2 id="ft">Add a product</h2><form id="pf"><input type="hidden" name="slug">
+ $('#app').innerHTML=`<div class="box"><b>Live instantly.</b> Products, PDFs, covers and prices you save here go live right away. No publishing and no Netlify credits are needed.</div><div class="box"><h2>Add many PDFs at once</h2><p class="mu">Choose the section and one rupee price, then select all your PDF files together. Each file becomes a product and its title comes from the file name. Edit descriptions and prices afterwards.</p><label>Section</label><select id="bsec">${CATS.map(c=>`<option>${c}</option>`).join('')}</select><label>Price in rupees (for all)</label><input id="bpr" type="number" min="1" value="199"><label>Price in US dollars (optional)</label><input id="busd" type="number" min="0" step="0.01"><label>PDF files (select many)</label><input id="bpdf" type="file" accept="application/pdf" multiple><label>Cover pictures (optional, select many, each with the same file name as its PDF)</label><input id="bcov" type="file" accept="image/*" multiple><button data-a="bulk">Upload all</button><div id="blog" class="mu"></div></div><div class="box"><h2 id="ft">Add a product</h2><form id="pf"><input type="hidden" name="slug">
  <label>Title</label><input name="title" required><label>Section</label><select name="cat">${CATS.map(c=>`<option>${c}</option>`).join('')}</select>
- <label>Price in rupees</label><input name="price" type="number" min="1" required><label>Number of pages</label><input name="pages" type="number" min="0">
+ <label>Price in rupees</label><input name="price" type="number" min="1" required><label>Price in US dollars (optional: shown to visitors outside India)</label><input name="pUSD" type="number" min="0" step="0.01"><label>Price in euros (optional: euro countries)</label><input name="pEUR" type="number" min="0" step="0.01"><label>Price in pounds (optional: UK)</label><input name="pGBP" type="number" min="0" step="0.01"><label>Number of pages</label><input name="pages" type="number" min="0">
  <label>Cover emoji (used when there is no cover image)</label><input name="emoji" maxlength="4" placeholder="📘"><label>Cover colour</label><input name="color" type="color" value="#3b82f6">
- <label>Short description (1–2 sentences, shown on Google)</label><input name="short" maxlength="160"><label>Full description</label><textarea name="desc" rows="5"></textarea>
+ <label>Short description (1–2 sentences, shown on Google)</label><input name="short" maxlength="160"><label>Full description</label><textarea name="desc" rows="5"></textarea><label>Cover image description for Google (say what the picture shows)</label><input name="alt" maxlength="200"><label>Questions and answers, one per line: Question | Answer</label><textarea name="faq" rows="4" placeholder="Is it good for kids? | Yes, every recipe is kid-friendly."></textarea>
  <label>Cover image (any picture, cropped to 600×800)</label><input id="cov" type="file" accept="image/*"><label>PDF file (up to about 18 MB)</label><input id="pdf" type="file" accept="application/pdf">
  <button>Save product</button> <span id="ps" class="mu"></span></form></div>${rows}<input id="fp" type="file" hidden>`;
  $('#pf').onsubmit=saveProduct}
@@ -37,8 +37,24 @@ async function coverJpeg(f){const im=await createImageBitmap(f),W=600,Ht=800,c=d
 async function upCover(slug,f){const b=await (await coverJpeg(f)).arrayBuffer(),r=await api('cover',b,'&slug='+slug,'application/octet-stream');if(!r.ok)throw new Error(r.error||'cover failed')}
 async function upPdf(slug,f,prog){const C=3*1024*1024,n=Math.ceil(f.size/C);if(n>6)throw new Error('This PDF is too big (limit about 18 MB). Compress it first.');
  for(let i=0;i<n;i++){const b=await f.slice(i*C,(i+1)*C).arrayBuffer();let r,t=0;do{r=await api('chunk',b,`&slug=${slug}&i=${i}&n=${n}&size=${f.size}`,'application/octet-stream')}while(!r.ok&&++t<3);if(!r.ok)throw new Error(r.error||'upload failed');prog(Math.round((i+1)/n*100))}}
+async function bulkUpload(){
+ const pdfs=[...$('#bpdf').files],covs=[...$('#bcov').files],log=$('#blog'),sec=$('#bsec').value,pr=+$('#bpr').value,usd=$('#busd').value;
+ if(!pdfs.length){log.textContent='Choose your PDF files first.';return}
+ if(!(pr>0)){log.textContent='Enter a rupee price.';return}
+ const base=f=>f.name.replace(/\.[^.]+$/,'').toLowerCase(),title=f=>f.name.replace(/\.[^.]+$/,'').replace(/[_\-]+/g,' ').replace(/\s+/g,' ').trim().replace(/\b\w/g,c=>c.toUpperCase()),slugOf=t=>t.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
+ log.innerHTML=pdfs.map((f,i)=>'<div id="b'+i+'">⏳ '+H(f.name)+'</div>').join('');let done=0;
+ for(let i=0;i<pdfs.length;i++){const f=pdfs[i],row=$('#b'+i),t=title(f);
+  try{
+   if(f.size>18*1048576)throw new Error('over 18 MB, compress it first');
+   const r=await api('save',{title:t,cat:sec,price:pr,prices:{USD:usd},short:t+' (PDF)',desc:'',pages:0}),slug=r.slug||slugOf(t);
+   if(!r.slug&&!/already exists/.test(r.error||''))throw new Error(r.error||'could not save');
+   await upPdf(slug,f,p=>row.textContent='⬆️ '+f.name+' '+p+'%');
+   const c=covs.find(x=>base(x)===base(f));if(c)await upCover(slug,c);
+   row.textContent='✅ '+t+(r.slug?' (added)':' (PDF replaced)');done++;
+  }catch(e){row.textContent='❌ '+f.name+': '+e.message}}
+ log.insertAdjacentHTML('beforeend','<p><b>Finished: '+done+' of '+pdfs.length+'.</b> Open the Products tab to edit descriptions and prices.</p>')}
 async function saveProduct(e){e.preventDefault();const d=Object.fromEntries(new FormData(e.target)),st=$('#ps');st.textContent='Saving…';
- const r=await api('save',{slug:d.slug,title:d.title,cat:d.cat,price:+d.price,pages:+d.pages||0,emoji:d.emoji,color:d.color,short:d.short,desc:d.desc});
+ const r=await api('save',{slug:d.slug,title:d.title,cat:d.cat,price:+d.price,prices:{USD:d.pUSD,EUR:d.pEUR,GBP:d.pGBP},pages:+d.pages||0,emoji:d.emoji,color:d.color,short:d.short,desc:d.desc,alt:d.alt,faq:d.faq});
  if(!r.slug){st.textContent=r.error||'Could not save';return}
  try{if($('#cov').files[0]){st.textContent='Uploading cover…';await upCover(r.slug,$('#cov').files[0])}if($('#pdf').files[0])await upPdf(r.slug,$('#pdf').files[0],p=>st.textContent='Uploading PDF '+p+'%')}catch(x){st.textContent='Upload problem: '+x.message;return}
  await refresh();products()}
@@ -56,7 +72,10 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
  if(a==='csv'){const rows=[['email','sections','joined']].concat(window._wl.map(e=>[e.email,Object.keys(e.cats).join(' '),new Date(Math.min(...Object.values(e.cats))).toISOString()])),csv=rows.map(r=>r.map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')).join('\n'),l=document.createElement('a');l.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));l.download='waitlist.csv';l.click()}
  if(a==='adj'){const r=await api('adjust',{code:$('#ac').value.trim(),amt:+$('#aa').value});if(r.ok)credit();else $('#am').textContent=r.error||'Failed'}
  if(a==='del'&&confirm('Remove this product from the shop? (PDF files are kept)')){await api('delete',{slug:s});await refresh();products()}
- if(a==='edit'){const p=window._items.find(x=>x.slug===s).rec,f=$('#pf');for(const k of['slug','title','cat','price','pages','emoji','color','short','desc'])f.elements[k].value=p[k]??'';$('#ft').textContent='Edit: '+p.title;scrollTo(0,0)}
+ if(a==='edit'){const p=window._items.find(x=>x.slug===s).rec,f=$('#pf');for(const k of['slug','title','cat','price','pages','emoji','color','short','desc'])f.elements[k].value=p[k]??'';f.elements.pUSD.value=(p.prices||{}).USD||'';f.elements.pEUR.value=(p.prices||{}).EUR||'';f.elements.pGBP.value=(p.prices||{}).GBP||'';f.elements.alt.value=p.alt||'';f.elements.faq.value=(p.faq||[]).map(x=>x.q+' | '+x.a).join('\n');$('#ft').textContent='Edit: '+p.title;scrollTo(0,0)}
+ if(a==='bulk'){bulkUpload();return}
+ if(a==='openpdf'){window.open('/api/admin?a=pdf&slug='+encodeURIComponent(s),'_blank');return}
+ if(a==='openpage'){window.open(b.dataset.u,'_blank');return}
  if(a==='pick'){target={k:b.dataset.k,s};const fp=$('#fp');fp.accept=b.dataset.k==='pdf'?'application/pdf':'image/*';fp.value='';fp.onchange=async()=>{const f=fp.files[0];if(!f)return;b.textContent='Uploading…';try{if(target.k==='pdf')await upPdf(target.s,f,p=>b.textContent='PDF '+p+'%');else await upCover(target.s,f)}catch(x){b.textContent='Failed: '+x.message;return}await refresh();products()};fp.click()}
 });
 start().catch(()=>{});
