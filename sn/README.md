@@ -43,6 +43,18 @@ Option A (easy, no tools): upload the PDF to `private-pdfs/`, the cover to `cove
 Option B (Python on your computer): `python add_product.py --title "..." --cat kids --price 149 --pdf book.pdf --cover cover.jpg --pages 24 --short "..." --desc "..."`, then upload the changed files.
 The page, sitemap and Google product data are created automatically on each build. A product shows "Coming soon" until its PDF exists.
 
+## Product pages, questions, bulk upload
+- **Whole cards are clickable** on every shop list. Long descriptions are shown compactly (short lines become columns, with a Read more button) and the full text stays on the page for Google.
+- **Questions:** in the admin product form, write one question per line as `Question | Answer`. They appear on the product page (with five standard questions about downloads, devices, payment and refunds) and are added to the page's Google data (FAQPage). Google shows FAQ boxes in results only for some sites, but the text still helps the page get found.
+- **Picture text:** the field "Cover image description" is used as the picture's alt text and as the caption in Google's image data.
+- **Check a PDF:** in the admin Products list, "Open PDF" opens the uploaded file in your browser and shows its size; "View page" opens the public page.
+- **Bulk add:** in admin Products, "Add many PDFs at once". Choose the section and a price, select all the PDFs (and optional cover pictures with the same file names), press Upload all. Each file becomes a product named from its file name (max about 18 MB each). Edit descriptions afterwards.
+- **Percentage launch offers:** in `campaign.json` a phase can use `"discount_pct"` for the launch discount and `"reward_pct"` for the referral reward instead of fixed prices, for example `"cooking": {"open_day": 0, "days": 7, "discount_pct": 30, "reward_pct": 50, "reward_days": 7}`. A launch price is only advertised when it really lowers a price.
+
+## Prices in other currencies
+Each product has a rupee price and optional prices in US dollars, euros and pounds (set them in the admin product form, or add `"prices": {"USD": 9.99, "EUR": 8.99, "GBP": 7.99}` to a product in `products.json`). Visitors see: India = rupees (cannot be changed), UK = pounds, euro countries = euros, everyone else = dollars. Outside India a small Currency box in the footer lets a visitor switch between USD, EUR and GBP. If a price is missing: pounds fall back to dollars, euros fall back to dollars, and if there is no dollar price either, the rupee price is charged. Launch offers give the same percentage off in every currency. Store credit works only for rupee orders. A friend's purchase in any currency earns the referrer the same rupee amount, based on the rupee value of the sale.
+You must turn on **International payments** in your Razorpay dashboard (it may need approval). Foreign cards usually cost more in fees, and Razorpay pays you out in rupees. VAT or sales tax on sales to the UK, EU and US is not handled by the site: ask an accountant.
+
 ## Launch plan, timers, perks and rewards (campaign.json)
 `campaign.json` runs the whole launch. Day 0 is the `start` date (change it to your real launch date, in India time).
 - **Cooking** opens on day 0. Launch price 399 for 7 days. A person who gets 5 different first-time customers to buy through their link in that week unlocks 299 on all cooking books for 7 days (one time only).

@@ -19,7 +19,7 @@ CP = {'enabled': False}
 if CAMP.get('enabled'):
     _t0 = _ms(CAMP['start']); _D = 86400000; _ph = {}
     for _c, _f in CAMP['phases'].items():
-        _ph[_c] = dict({'open': _t0 + int(_f['open_day']) * _D, 'end': _t0 + (int(_f['open_day']) + int(_f['days'])) * _D}, **{k: _f[k] for k in ('launch_price', 'discount_pct', 'reward_price', 'reward_days', 'waitlist_required') if k in _f})
+        _ph[_c] = dict({'open': _t0 + int(_f['open_day']) * _D, 'end': _t0 + (int(_f['open_day']) + int(_f['days'])) * _D}, **{k: _f[k] for k in ('launch_price', 'discount_pct', 'reward_price', 'reward_pct', 'reward_days', 'waitlist_required') if k in _f})
     _pk = CAMP.get('perks', {})
     CP = {'enabled': True, 'start': _t0, 'unlock_referrals': CAMP['unlock_referrals'], 'phases': _ph, 'perks': _pk, 'min_pay_pct': CAMP.get('min_pay_pct', 30), 'rank_end': _t0 + int(_pk.get('ranking_days', 45)) * _D, 'prizes': CAMP.get('prizes', [])}
 CATS = {
@@ -58,7 +58,7 @@ def write(path, s):
 # data for the serverless functions
 os.makedirs('netlify/functions', exist_ok=True)
 open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'campaign': CP, 'admin_path': ADMIN_PATH, **{k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}}) + ';\n')
-open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf'], 'cat': p['cat'], 'short': p.get('short', ''), 'emoji': p.get('emoji', '📘'), 'color': p.get('color', '#3b82f6'), 'added': p.get('added', ''), 'img': p['img']} for p in products}, ensure_ascii=False) + ';\n')
+open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf'], 'cat': p['cat'], 'prices': p.get('prices', {}), 'short': p.get('short', ''), 'emoji': p.get('emoji', '📘'), 'color': p.get('color', '#3b82f6'), 'added': p.get('added', ''), 'img': p['img']} for p in products}, ensure_ascii=False) + ';\n')
 
 stars = lambda n: '★' * int(round(n)) + '☆' * (5 - int(round(n)))
 rv = lambda s: [r for r in reviews if r['slug'] == s]
@@ -85,7 +85,7 @@ def deco(k):
     if k == 'kids': return '<div class="sun"></div><div class="cloud" style="left:6%;top:50px"></div><div class="cloud" style="left:48%;top:20px;transform:scale(.75)"></div><div class="rainbow"></div>'
     return ''
 def cvparts(p):
-    if p['img']: return ' img', '<img src="/covers/%s" alt="Cover of %s" loading="lazy" width="600" height="800">' % (E(p['img']), E(p['title']))
+    if p['img']: return ' img', '<img src="/covers/%s" alt="%s" loading="lazy" width="600" height="800">' % (E(p['img']), E(p.get('alt') or 'Cover of ' + p['title']))
     return '', '%s<small>%s</small>' % (E(p['emoji']), E(p['title']))
 def card(p):
     r = rv(p['slug']); cls, inner = cvparts(p)
@@ -98,7 +98,7 @@ def _ph_text(c, f):
     t = []
     if f.get('launch_price'): t.append('every book %s' % INR(f['launch_price']))
     if f.get('discount_pct'): t.append('%d%% off%s' % (f['discount_pct'], ' for people on the waitlist' if f.get('waitlist_required') else ''))
-    if f.get('reward_price'): t.append('refer %d friends and get all books for %s for %d days' % (CP['unlock_referrals'], INR(f['reward_price']), f.get('reward_days', 7)))
+    if f.get('reward_price') or f.get('reward_pct'): t.append('refer %d friends and get all books for %s for %d days' % (CP['unlock_referrals'], INR(f['reward_price']) if f.get('reward_price') else '%d%% off' % f['reward_pct'], f.get('reward_days', 7)))
     return ', '.join(t)
 SCHED = ''
 if CP['enabled']:
@@ -119,13 +119,35 @@ for k, c in CATS.items():
         deco(k), E(c['h1']), E(c['intro']), '<div class="emo" aria-hidden="true">%s</div>' % c['emo'] if c['emo'] else '', E(c['name']), disc(k), ''.join(card(p) for p in items), '' if items else '<p class="panel">New PDFs are coming soon.</p>') + FOOT)
 
 # ---- product pages ----
+def desc_html(text):
+    lines = [l.strip() for l in str(text or '').split('\n') if l.strip()]; out = []; buf = []
+    def flush():
+        if buf: out.append('<ul class="cols">%s</ul>' % ''.join('<li>%s</li>' % E(x) for x in buf)); del buf[:]
+    for l in lines:
+        if len(l) <= 48 and not l.endswith(('.', '!', '?')): buf.append(l)
+        else: flush(); out.append('<p>%s</p>' % E(l))
+    flush()
+    long_ = len(lines) > 8 or len(str(text or '')) > 700
+    return '<div class="desc%s" id="desc">%s</div>%s' % (' clamp' if long_ else '', ''.join(out), '<button class="more" data-more="desc" type="button">Read more</button>' if long_ else '')
+def default_faq():
+    return [('Is this a physical book?', 'No. It is a digital PDF that you download right after payment. Nothing is shipped.'),
+            ('How do I get the PDF after paying?', 'After payment you come back to our site and your download opens right away. We also email you the same link, and you can always download the latest version from My Library on your private page.'),
+            ('Which devices can I use?', 'Any phone, tablet or computer that can open a PDF. You can also print it for your own use.'),
+            ('Which payment methods work?', 'UPI, cards, net banking and wallets through Razorpay.'),
+            ('Can I get a refund?', 'Digital files cannot be returned once downloaded. If the file is damaged, or you were charged but did not receive it, email us within 7 days and we will fix it or refund you.')]
+def faq_html(items):
+    return '<section class="panel" id="faq"><h2>Questions</h2>%s</section>' % ''.join('<details><summary>%s</summary><p>%s</p></details>' % (E(q), E(a)) for q, a in items)
 RVFORM = '<h3>Write a review</h3><form id="rvf" data-slug="%s"><label for="rvr">Your rating</label><select id="rvr"><option value="5">★★★★★ 5 – Loved it</option><option value="4">★★★★☆ 4</option><option value="3">★★★☆☆ 3</option><option value="2">★★☆☆☆ 2</option><option value="1">★☆☆☆☆ 1</option></select><label for="rvn">Your name</label><input id="rvn" maxlength="40" autocomplete="name"><label for="rvt">Your review</label><textarea id="rvt" rows="4" maxlength="600" required></textarea><input id="rvw" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">Submit review</button><p id="rvm" class="note" role="status">Reviews are checked before they appear. Readers who bought this PDF here get a “Verified buyer” label.</p></form>'
 for p in products:
     c = CATS[p['cat']]; r = rv(p['slug']); a = avg(r); path = href(p)
     img = '%s/covers/%s' % (SITE, p['img']) if p['img'] else ''
     pj = {'@context': 'https://schema.org', '@type': 'Product', 'name': p['title'], 'description': p['short'], 'brand': {'@type': 'Brand', 'name': c['name']},
           'offers': {'@type': 'Offer', 'price': p['price'], 'priceCurrency': 'INR', 'availability': 'https://schema.org/InStock' if p['pdf'] else 'https://schema.org/OutOfStock', 'url': SITE + path}}
-    if img: pj['image'] = img
+    ALT = p.get('alt') or 'Cover of ' + p['title']
+    if img: pj['image'] = {'@type': 'ImageObject', 'url': img, 'caption': ALT, 'description': ALT, 'name': p['title']}
+    FAQS = [(x['q'], x['a']) for x in (p.get('faq') or []) if x.get('q') and x.get('a')] + default_faq()
+    fq = {'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [{'@type': 'Question', 'name': q, 'acceptedAnswer': {'@type': 'Answer', 'text': a}} for q, a in FAQS]}
+    FAQH = faq_html(FAQS)
     if r:
         pj['aggregateRating'] = {'@type': 'AggregateRating', 'ratingValue': round(a, 1), 'reviewCount': len(r)}
         pj['review'] = [{'@type': 'Review', 'author': {'@type': 'Person', 'name': x['name']}, 'reviewRating': {'@type': 'Rating', 'ratingValue': x['rating']}, 'reviewBody': x['text']} for x in r]
@@ -136,10 +158,10 @@ for p in products:
     revs = ''.join('<div class="rev"><span class="stars">%s</span> <b>%s</b>%s<p>%s</p></div>' % (stars(x['rating']), E(x['name']), ' <small>Verified buyer</small>' if x.get('verified') else '', E(x['text'])) for x in r) or '<p>No reviews yet.</p>'
     revs = '<div id="revlist" data-slug="%s">%s</div>' % (E(p['slug']), revs)
     rel = [x for x in products if x['cat'] == p['cat'] and x['slug'] != p['slug']][:3]
-    write(path + 'index.html', head('%s (PDF) | %s' % (p['title'], c['name']), p['short'], p['cat'], path, [pj, bc], img)
+    write(path + 'index.html', head('%s (PDF) | %s' % (p['title'], c['name']), p['short'], p['cat'], path, [pj, bc, fq], img)
       + '<main class="w"><p class="crumbs"><a href="/">Home</a> / <a href="/%s/">%s</a> / %s</p><div class="prod"><div class="cv big%s" style="background:%s"%s>%s</div><div class="panel"><h1>%s</h1>%s<p class="pr big" id="price">%s</p><div id="offers"></div><div id="soon"></div><p>%s</p>%s</div></div>' % (
-        p['cat'], E(c['short']), E(p['title']), cls, E(p['color']), '' if p['img'] else ' role="img" aria-label="Cover of %s"' % E(p['title']), inner, E(p['title']), rate, INR(p['price']), E(p['short']), buy)
-      + '<section class="panel"><h2>About this PDF</h2>%s<ul><li>%d pages, PDF format</li><li>Opens on phone, tablet and computer</li><li>Link sent by email after payment</li></ul></section>%s<section class="panel" id="reviews"><h2>Reviews</h2>%s%s</section>' % (''.join('<p>%s</p>' % E(l) for l in p['desc'].split('\n') if l.strip()), int(p.get('pages', 0)), disc(p['cat']), revs, RVFORM % E(p['slug']))
+        p['cat'], E(c['short']), E(p['title']), cls, E(p['color']), '' if p['img'] else ' role="img" aria-label="%s"' % E(p.get('alt') or 'Cover of ' + p['title']), inner, E(p['title']), rate, INR(p['price']), E(p['short']), buy)
+      + '<section class="panel"><h2>About this PDF</h2>%s<ul><li>%d pages, PDF format</li><li>Opens on phone, tablet and computer</li><li>Link sent by email after payment</li></ul></section>%s%s<section class="panel" id="reviews"><h2>Reviews</h2>%s%s</section>' % (desc_html(p['desc']), int(p.get('pages', 0)), disc(p['cat']), FAQH, revs, RVFORM % E(p['slug']))
       + ('<h2 class="tag">More from %s</h2><div class="grid">%s</div>' % (E(c['name']), ''.join(card(x) for x in rel)) if rel else '') + '</main>' + FOOT)
 
 # ---- policy pages ----
@@ -175,5 +197,5 @@ urls = [('', today), ('refer/', today), ('leaderboard/', today)] + [(k + '/', to
 write('robots.txt', 'User-agent: *\nDisallow: /thank-you/\nDisallow: /credit/\nDisallow: /api/\nSitemap: %s/sitemap.xml\n' % SITE)
 os.makedirs('dist/' + ADMIN_PATH, exist_ok=True); shutil.move('dist/assets/admin.html', 'dist/%s/index.html' % ADMIN_PATH)
 for _f in ('favicon.svg', 'favicon.ico', 'apple-touch-icon.png'): shutil.copy('static/' + _f, 'dist/' + _f)
-open('netlify/functions/_shell.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'site': SITE, 'fonts': FONTS, 'campjs': CAMPJS, 'nav': ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items()), 'foot': FOOT, 'fav': FAV, 'verify': VERIFY, 'cats': {k: {'name': c['name'], 'short': c['short']} for k, c in CATS.items()}, 'disc': disc('trading'), 'leaderboard': bool(CP['enabled'])}, ensure_ascii=False) + ';\n')
+open('netlify/functions/_shell.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'site': SITE, 'fonts': FONTS, 'campjs': CAMPJS, 'nav': ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items()), 'foot': FOOT, 'fav': FAV, 'verify': VERIFY, 'cats': {k: {'name': c['name'], 'short': c['short']} for k, c in CATS.items()}, 'disc': disc('trading'), 'leaderboard': bool(CP['enabled']), 'faqd': default_faq()}, ensure_ascii=False) + ';\n')
 print('Built %d products, %d pages' % (len(products), 1 + len(CATS) + len(products) + len(PG) + 3))
