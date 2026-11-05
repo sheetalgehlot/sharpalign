@@ -19,7 +19,7 @@ export default async (req,context)=>{
   const live=Object.entries(CP.phases||{}).filter(([c,f])=>CP.enabled&&f.end>f.open&&now>=f.open&&now<f.end).sort((a,b)=>a[1].end-b[1].end)[0];
   let offer='';
   if(live){const [c,f]=live,t=[];if(f.launch_price)t.push('every book ₹'+f.launch_price);if(f.discount_pct)t.push(f.discount_pct+'% off');
-   offer=`\n\nLAUNCH OFFER: ${c} PDFs, ${t.join(', ')}, until ${dd(f.end)}.`+(f.reward_price?` When ${CP.unlock_referrals} friends buy through your link, you get ALL ${c} books for ₹${f.reward_price} for ${f.reward_days||7} days. One-time offer.`:'');}
+   offer=`\n\nLAUNCH OFFER: ${c} PDFs, ${t.join(', ')}, until ${dd(f.end)}.`+((f.reward_price||f.reward_pct)?` When ${CP.unlock_referrals} friends buy through your link, you get ALL ${c} books for ${f.reward_price?'₹'+f.reward_price:f.reward_pct+'% off'} for ${f.reward_days||7} days. One-time offer.`:'');}
   await mail(email,'Your Sharpalign referral link',`Welcome! Here is your personal link:\n${o}/?ref=${code}\n\nYour private page (keep it to yourself): ${o}/credit/#${rkey(code)}\n\nFriends who buy through your link get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay as store credit. The top referrers win VIP perks and prizes: ${o}/leaderboard/`+offer+'\n\nSharpalign');
  }
  return json({ok:true});

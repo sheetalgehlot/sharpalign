@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {json,store,env,mail,P,catalog,bust,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
+import {json,store,env,mail,P,catalog,bust,servePdf,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
 const SLUG=/^[a-z0-9-]{1,80}$/,CATS=['kids','cooking','journals','novels','trading'];
 export default async (req,context)=>{
  const u=new URL(req.url),a=u.searchParams.get('a')||'',q=k=>u.searchParams.get(k)||'',s=store(),origin=u.origin;
@@ -23,6 +23,7 @@ export default async (req,context)=>{
  if(req.method!=='GET'&&req.headers.get('x-admin')!=='1')return json({error:'bad request'},400);
  const CAT=await catalog();
  if(a==='chpw'){const pw=String((await req.json().catch(()=>({}))).password||'').trim();if(pw.length<PW_MIN)return json({error:'Use at least '+PW_MIN+' characters.'},400);await s.setJSON('adm/pw',hashPw(pw));return json({ok:true});}
+ if(a==='pdf'){const sl=q('slug');if(!SLUG.test(sl))return json({error:'bad'},400);if(!(CAT[sl]&&CAT[sl].pdf))return new Response('No PDF has been uploaded for this product yet.',{status:404});return servePdf(sl,s,async()=>{},true);}
  if(a==='me')return json({ok:true,dirty:false});
  if(a==='orders'){const o=(await all('order/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(6),email:r.email,title:CAT[r.slug]?.title||r.slug,t:r.t,dl:r.dl}));o.sort((x,y)=>y.t-x.t);return json({items:o.slice(0,100)});}
  if(a==='resend'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);
@@ -45,13 +46,13 @@ export default async (req,context)=>{
   await s.setJSON('meta/finalized',{t:Date.now(),count:rows.length});return json({ok:true,count:rows.length});}
  if(a==='reviews'){return json({items:(await all('rv/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(3),title:CAT[r.slug]?.title||r.slug,...r,status:r.status||'pending'}))});}
  if(a==='reviewset'){const b=await req.json(),k='rv/'+b.oid,r=await g(k,null);if(!r)return json({error:'Not found'},404);r.status=['approved','rejected'].includes(b.status)?b.status:'pending';await s.setJSON(k,r);await mark();return json({ok:true});}
- if(a==='products'){return json({items:Object.entries(CAT).map(([sl,p])=>({slug:sl,title:p.title,cat:p.cat,price:p.price,source:p.source,pdf:!!p.pdf,cover:!!p.cover,rec:p.rec||null}))});}
+ if(a==='products'){return json({items:Object.entries(CAT).map(([sl,p])=>({slug:sl,title:p.title,cat:p.cat,price:p.price,source:p.source,pdf:!!p.pdf,pdfmeta:p.pdfmeta||null,cover:!!p.cover,rec:p.rec||null}))});}
  if(a==='save'){const b=await req.json(),title=String(b.title||'').trim().slice(0,120),cat=String(b.cat),price=parseInt(b.price);
   const slug=String(b.slug||'')||title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
   if(!title||!CATS.includes(cat)||!(price>0)||!SLUG.test(slug))return json({error:'Please fill title, section and price.'},400);
   const ap=await g('adm/products',[]),old=ap.find(x=>x.slug===slug);
   if(!b.slug&&(old||Object.hasOwn(CAT,slug)))return json({error:'A product with this title already exists.'},400);
-  const rec={slug,cat,title,price,pages:parseInt(b.pages)||0,emoji:String(b.emoji||'📘').slice(0,4),color:/^#[0-9a-f]{6}$/i.test(b.color)?b.color:'#3b82f6',short:String(b.short||'').slice(0,160),desc:String(b.desc||'').slice(0,4000),added:old?.added||new Date().toISOString().slice(0,10)};
+  const rec={slug,cat,title,price,pages:parseInt(b.pages)||0,emoji:String(b.emoji||'📘').slice(0,4),color:/^#[0-9a-f]{6}$/i.test(b.color)?b.color:'#3b82f6',prices:(()=>{const o={};for(const c of ['USD','EUR','GBP']){const v=Math.round(parseFloat((b.prices||{})[c])*100)/100;if(v>=0.5&&v<=100000)o[c]=v;}return o;})(),alt:String(b.alt||'').trim().slice(0,200),faq:String(b.faq||'').split('\n').map(l=>l.trim()).filter(Boolean).slice(0,12).map(l=>{const i=l.indexOf('|');return i>0?{q:l.slice(0,i).trim().slice(0,200),a:l.slice(i+1).trim().slice(0,800)}:null}).filter(x=>x&&x.q&&x.a),short:String(b.short||'').slice(0,160),desc:String(b.desc||'').slice(0,4000),added:old?.added||new Date().toISOString().slice(0,10)};
   await s.setJSON('adm/products',[...ap.filter(x=>x.slug!==slug),rec]);await mark();return json({slug});}
  if(a==='delete'){const sl=String((await req.json()).slug),ap=await g('adm/products',[]);await s.setJSON('adm/products',ap.filter(x=>x.slug!==sl));
   if(Object.hasOwn(P,sl)){const rm=await g('adm/removed',[]);if(!rm.includes(sl))await s.setJSON('adm/removed',[...rm,sl]);}await mark();return json({ok:true});}

@@ -1,5 +1,8 @@
 import {createHash,createHmac,timingSafeEqual,scryptSync,randomBytes} from 'node:crypto';
 import {getStore} from '@netlify/blobs';
+import {createReadStream,existsSync,statSync} from 'node:fs';
+import {Readable} from 'node:stream';
+import path from 'node:path';
 import CFG from './_config.mjs';
 import P from './_products.mjs';
 export {CFG,P};
@@ -18,8 +21,8 @@ export async function catalog(){
  const s=store(),g=async(k,d)=>(await s.get(k,{type:'json'}))||d;
  const [ap,pd,cv,rm]=await Promise.all([g('adm/products',[]),g('adm/pdfs',{}),g('adm/covers',{}),g('adm/removed',[])]);
  const out={};
- for(const [k,v] of Object.entries(P)){if(rm.includes(k))continue;out[k]={...v,pdf:!!(v.pdf||pd[k]),cover:!!cv[k],source:'file'};}
- for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,cat:p.cat,short:p.short,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin'};}
+ for(const [k,v] of Object.entries(P)){if(rm.includes(k))continue;out[k]={...v,pdf:!!(v.pdf||pd[k]),cover:!!cv[k],source:'file',pdfmeta:pd[k]||null};}
+ for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,prices:p.prices||{},cat:p.cat,short:p.short,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin',pdfmeta:pd[p.slug]||null};}
  CATC=out;CATT=Date.now();return out;}
 export const productA=async s=>{const c=await catalog();return Object.hasOwn(c,s)?c[s]:null;};
 export async function reviewsFor(slug){const s=store(),out=[];for(const b of (await s.list({prefix:'rv/'})).blobs){const r=await s.get(b.key,{type:'json'});if(r&&r.status==='approved'&&(!slug||r.slug===slug))out.push({slug:r.slug,name:r.name,rating:r.rating,text:r.text,date:r.date,verified:!!r.verified});}return out;}
@@ -37,7 +40,7 @@ export const balance=r=>{const n=Date.now();let b=0,p=0;for(const x of r.ledger)
 export const CP=CFG.campaign||{};
 export const phase=c=>CP.enabled?(CP.phases||{})[c]||null:null;
 export const stateOf=(c,n=Date.now())=>{const f=phase(c);return !f?'open':n<f.open?'soon':n<f.end?'launch':'after';};
-export const rwp=()=>Object.entries(CP.phases||{}).find(([c,f])=>f.reward_price);
+export const rwp=()=>Object.entries(CP.phases||{}).find(([c,f])=>f.reward_price||f.reward_pct);
 export const unlockOn=(r,n=Date.now())=>!!(r&&r.unlock&&n<r.unlock.until);
 export const isBuyer=r=>!!r&&r.buyer!==false;
 export const hasPerk=r=>!!(r&&(r.founder||r.top));
@@ -51,25 +54,33 @@ export async function board(force){
  const rows=[];let members=0;
  for(const b of (await s.list({prefix:'ref/'})).blobs){const r=await s.get(b.key,{type:'json'});if(!r)continue;members++;const n=(r.refs||[]).length;if(n)rows.push({code:b.key.slice(4),n,t:Math.max(...r.refs.map(x=>x.t)),mask:mask(r.email)});}
  rows.sort((a,b)=>b.n-a.n||a.t-b.t);const out={t:Date.now(),members,rows};await s.setJSON('lb/cache',out);return out;}
-export async function quote(p,email,ref,ck){
+// ---- currencies: India pays rupees, UK pounds, euro countries euros, everyone else dollars ----
+const EU=new Set('AT BE BG HR CY EE FI FR DE GR IE IT LV LT LU MT NL PT SK SI ES'.split(' '));
+export function currencyFor(country,req){const c=String(country||'').toUpperCase();if(!c||c==='IN')return 'INR';if(['USD','EUR','GBP'].includes(req))return req;if(c==='GB')return 'GBP';if(EU.has(c))return 'EUR';return 'USD';}
+export function pickCurrency(p,country,req){const want=currencyFor(country,req),pr=p.prices||{};if(want==='INR')return 'INR';if(pr[want]>0)return want;if(pr.USD>0)return 'USD';return 'INR';}
+const r2=n=>Math.round(n*100)/100;
+export async function quote(p,email,ref,ck,opt={}){
  const now=Date.now(),f=phase(p.cat),cc=keyCode(ck),rk=cc?await getRef(cc):null,re=email?await getRef(rcode(email)):null;
+ const cur=pickCurrency(p,opt.country,opt.cur),pc=cur==='INR'?p.price:p.prices[cur],ratio=pc/p.price,conv=v=>cur==='INR'?v:r2(v*ratio);
  const perk=hasPerk(rk)||hasPerk(re),unl=unlockOn(rk)||unlockOn(re);
- const q={price:p.price,base:p.price,tag:'',fd:0,credit:0,ref:'',cr:'',pay:p.price,state:stateOf(p.cat,now),locked:false,wl:false,avail:!!p.pdf};
+ const q={price:pc,base:pc,tag:'',fd:0,credit:0,ref:'',cr:'',pay:pc,pay_inr:p.price,currency:cur,state:stateOf(p.cat,now),locked:false,wl:false,avail:!!p.pdf};
  const early=((CP.perks||{}).early_hours||0)*36e5;
  if(q.state==='soon'){if(perk&&f&&now>=f.open-early)q.state='launch';else{q.locked=true;return q;}}
+ // all discount rules run in rupees; other currencies get the same percentage off their own price
  let base=p.price,tag='';
  if(f&&q.state==='launch'){
   if(!f.waitlist_required||(email&&await onWaitlist(email,p.cat,f.open))){if(f.launch_price)base=Math.min(base,f.launch_price);if(f.discount_pct)base=Math.min(base,Math.floor(p.price*(100-f.discount_pct)/100));if(base<p.price)tag='launch';}
   else q.wl=true;}
- if(f&&f.reward_price&&unl&&f.reward_price<base){base=f.reward_price;tag='reward';}
+ if(f&&unl&&(f.reward_price||f.reward_pct)){const rv=Math.min(f.reward_price||Infinity,f.reward_pct?Math.floor(p.price*(100-f.reward_pct)/100):Infinity);if(rv<base){base=rv;tag='reward';}}
  if(perk&&CP.perks){const v=Math.floor(p.price*(100-CP.perks.discount_pct)/100);if(v<base){base=v;tag='perk';}}
- q.base=base;q.tag=tag;
- const rr=await getRef(ref);
- if(rr&&(!email||(rr.email!==email.toLowerCase()&&!isBuyer(re)))){q.ref=ref;q.fd=Math.floor(base*CFG.friend_discount_pct/100);}
- if(rk){const c=Math.max(0,Math.min(balance(rk)[0],Math.floor((base-q.fd)*CFG.credit_max_pct/100)));if(c>0){q.credit=c;q.cr=cc;}}
- const floor=Math.ceil(p.price*(CP.min_pay_pct||0)/100);let pay=base-q.fd-q.credit;
- if(pay<floor){let need=floor-pay;const d=Math.min(need,q.credit);q.credit-=d;need-=d;if(need>0)q.fd-=Math.min(need,q.fd);if(q.credit===0)q.cr='';pay=base-q.fd-q.credit;}
- q.pay=Math.max(1,pay);return q;}
+ q.tag=tag;
+ const rr=await getRef(ref);let fd=0,credit=0,crc='';
+ if(rr&&(!email||(rr.email!==email.toLowerCase()&&!isBuyer(re)))){q.ref=ref;fd=Math.floor(base*CFG.friend_discount_pct/100);}
+ if(rk&&cur==='INR'){const c=Math.max(0,Math.min(balance(rk)[0],Math.floor((base-fd)*CFG.credit_max_pct/100)));if(c>0){credit=c;crc=cc;}} // store credit is in rupees
+ const floor=Math.ceil(p.price*(CP.min_pay_pct||0)/100);let pay=base-fd-credit;
+ if(pay<floor){let need=floor-pay;const d=Math.min(need,credit);credit-=d;need-=d;if(need>0)fd-=Math.min(need,fd);if(credit===0)crc='';pay=base-fd-credit;}
+ q.base=conv(base);q.fd=conv(fd);q.credit=credit;q.cr=crc;q.pay_inr=Math.max(1,pay);q.pay=cur==='INR'?Math.max(1,pay):Math.max(0.5,r2(pay*ratio));
+ return q;}
 async function ledger(oid,em,o,n,origin){
  const s=store(),code=rcode(em),now=Date.now();let me=await getRef(code);
  if(!me||me.buyer===false){
@@ -82,13 +93,13 @@ async function ledger(oid,em,o,n,origin){
  const cr=parseInt(n.credit||0);
  if(cr>0&&n.cr){const r=await getRef(n.cr);if(r){r.ledger.push({t:now,type:'spend',amt:cr,order:oid});await s.setJSON('ref/'+n.cr,r);}}
  if(n.ref&&n.ref!==code){const r=await getRef(n.ref);if(r&&r.email!==em){
-  const c=Math.floor(Math.floor((o.amount_paid||0)/100)*CFG.ref_commission_pct/100);
+  const inrAmt=parseInt(n.inr)||Math.floor((o.amount_paid||0)/100),c=Math.floor(inrAmt*CFG.ref_commission_pct/100); // rupee value of the sale, whatever currency was paid
   if(c>0)r.ledger.push({t:now,type:'earn',amt:c,avail:now+CFG.hold_days*864e5,order:oid});
   let won=false;const w=rwp();
   if(seasonOn(now)){r.refs=r.refs||[];if(!r.refs.some(x=>x.email===em)){r.refs.push({t:now,order:oid,email:em});
    if(w&&!r.unlock&&now>=w[1].open&&now<w[1].end&&r.refs.filter(x=>x.t>=w[1].open&&x.t<w[1].end).length>=CP.unlock_referrals){r.unlock={t:now,until:now+(w[1].reward_days||7)*864e5};won=true;}}}
   await s.setJSON('ref/'+n.ref,r);
-  if(won)await mail(r.email,'You unlocked ₹'+w[1].reward_price+' on all '+w[0]+' books!',`Congratulations! ${CP.unlock_referrals} friends bought through your link.\n\nFor the next ${w[1].reward_days||7} days every ${w[0]} book is just ₹${w[1].reward_price} for you.\nOpen your private page and shop: ${origin}/credit/#${rkey(n.ref)}\n\nThis is a one-time reward.\n\nSharpalign`);
+  if(won)await mail(r.email,'You unlocked '+(w[1].reward_price?'₹'+w[1].reward_price:w[1].reward_pct+'% off')+' on all '+w[0]+' books!',`Congratulations! ${CP.unlock_referrals} friends bought through your link.\n\nFor the next ${w[1].reward_days||7} days every ${w[0]} book is ${w[1].reward_price?'just ₹'+w[1].reward_price:w[1].reward_pct+'% off'} for you.\nOpen your private page and shop: ${origin}/credit/#${rkey(n.ref)}\n\nThis is a one-time reward.\n\nSharpalign`);
  }}}
 // Runs after a verified payment (browser return OR webhook). Safe to run twice.
 export async function fulfil(oid,origin){
@@ -103,7 +114,7 @@ export async function fulfil(oid,origin){
  await ledger(oid,em,o,n,origin);
  const code=rcode(em),rec=await getRef(code),fl=rec&&rec.founder?`\n\n🏅 You are Founding Customer #${rec.founder}: ${CP.perks.discount_pct}% off any PDF, early access to new launches and free updates to every PDF you buy (see My Library on your private page).`:'';
  await mail(em,'Your PDF: '+p.title,`Thank you for your purchase!\n\nDownload "${p.title}" here:\n${origin}/thank-you/?t=${tok}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
- await mail(CFG.owner_email,'New sale: '+p.title,`${em} bought ${p.title} for Rs ${Math.floor((o.amount_paid||0)/100)}.\nOrder: ${oid}`);
+ await mail(CFG.owner_email,'New sale: '+p.title,`${em} bought ${p.title} for ${o.currency||'INR'} ${((o.amount_paid||0)/100).toFixed(2)}.\nOrder: ${oid}`);
  return tok;}
 // ---- admin ----
 export const mkAdmin=()=>{const p=Buffer.from(JSON.stringify({a:1,x:Date.now()+432e5})).toString('base64url');return p+'.'+hmac(sec(),'adm'+p).slice(0,32);};
@@ -114,3 +125,16 @@ export const hashPw=(p,salt=randomBytes(16).toString('hex'))=>({salt,hash:scrypt
 // Password order: 1) the one saved from the admin page, 2) the ADMIN_PASSWORD setting, 3) TOKEN_SECRET as a last resort.
 export const passOk=p=>{const a=env('ADMIN_PASSWORD'),t=env('TOKEN_SECRET'),want=a.length>=PW_MIN?a:(t.length>=16?t:'');return want.length>=PW_MIN&&same(String(p).trim(),want);};
 export async function passOkAsync(p){const saved=await store().get('adm/pw',{type:'json'});if(saved&&saved.salt)return safe(scryptSync(String(p).trim(),saved.salt,32).toString('hex'),saved.hash);return passOk(p);}
+
+// Sends a PDF to the browser (from the admin upload, or from the files bundled with the site).
+export async function servePdf(slug,s,count,inline){
+ const H=len=>({'content-type':'application/pdf','content-disposition':`${inline?'inline':'attachment'}; filename="${slug}.pdf"`,'content-length':String(len),'x-robots-tag':'noindex','cache-control':'private, no-store'});
+ const m=((await s.get('adm/pdfs',{type:'json'}))||{})[slug];
+ if(m){await count();let i=0;
+  return new Response(new ReadableStream({async pull(c){if(i>=m.parts){c.close();return;}const b=await s.get(`pdf/${slug}/${i++}`,{type:'arrayBuffer'});if(!b){c.error(new Error('missing part'));return;}c.enqueue(new Uint8Array(b));}}),{headers:H(m.size)});}
+ const file=slug+'.pdf',here=path.dirname(new URL(import.meta.url).pathname);
+ const f=[path.join(process.env.LAMBDA_TASK_ROOT||'/var/task','private-pdfs',file),path.join(process.cwd(),'private-pdfs',file),path.join(here,'../../private-pdfs',file)].find(existsSync);
+ if(!f)return new Response('File not found. Please contact us.',{status:404});
+ await count();
+ return new Response(Readable.toWeb(createReadStream(f)),{headers:H(statSync(f).size)});
+}
