@@ -7,6 +7,8 @@ E = lambda s: html.escape(str(s), quote=True)
 INR = lambda n: '₹{:,}'.format(int(n))
 load = lambda f, d: json.load(open(f, encoding='utf-8')) if os.path.isfile(f) else d
 CAMP = load('campaign.json', {'enabled': False})
+BUNDLE = load('bundle.json', {'enabled': False, 'tiers': [], 'max_items': 10})
+BUNDLE['tiers'] = sorted(BUNDLE.get('tiers', []), key=lambda t: t['items'])
 import re as _re
 ADMIN_PATH = str(load('admin.json', {'path': 'admin'}).get('path', 'admin')).strip('/ ')
 if not _re.fullmatch(r'[a-z0-9-]{4,40}', ADMIN_PATH): raise SystemExit('admin.json: "path" must be 4-40 lowercase letters, numbers or dashes')
@@ -53,11 +55,13 @@ for sl, data in covs.items(): open('dist/covers/%s.jpg' % sl, 'wb').write(base64
 for p in products:
     p['pdf'] = os.path.isfile('private-pdfs/%s.pdf' % p['slug']) or p['slug'] in pdfs
     p['img'] = next(('%s.%s' % (p['slug'], x) for x in ('jpg', 'jpeg', 'png', 'webp') if os.path.isfile('dist/covers/%s.%s' % (p['slug'], x))), '')
+    p['gallery'] = (EX.get('gallery') or {}).get(p['slug'], [])
+    p['sample'] = p['slug'] in set(EX.get('samples', []))
 def write(path, s):
     path = os.path.join('dist', path.lstrip('/')); os.makedirs(os.path.dirname(path), exist_ok=True); open(path, 'w', encoding='utf-8').write(s)
 # data for the serverless functions
 os.makedirs('netlify/functions', exist_ok=True)
-open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'campaign': CP, 'admin_path': ADMIN_PATH, **{k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}}) + ';\n')
+open('netlify/functions/_config.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({'campaign': CP, 'bundle': BUNDLE, 'admin_path': ADMIN_PATH, **{k: CFG[k] for k in ('owner_email', 'from_name', 'ref_commission_pct', 'friend_discount_pct', 'credit_max_pct', 'hold_days', 'link_days', 'max_downloads')}}) + ';\n')
 open('netlify/functions/_products.mjs', 'w', encoding='utf-8').write('export default ' + json.dumps({p['slug']: {'title': p['title'], 'price': int(p['price']), 'pdf': p['pdf'], 'cat': p['cat'], 'prices': p.get('prices', {}), 'short': p.get('short', ''), 'emoji': p.get('emoji', '📘'), 'color': p.get('color', '#3b82f6'), 'added': p.get('added', ''), 'img': p['img']} for p in products}, ensure_ascii=False) + ';\n')
 
 stars = lambda n: '★' * int(round(n)) + '☆' * (5 - int(round(n)))
@@ -67,6 +71,7 @@ href = lambda p: '/%s/%s/' % (p['cat'], p['slug'])
 ldjs = lambda j: '<script type="application/ld+json">' + json.dumps(j, ensure_ascii=False).replace('<', '\\u003c') + '</script>'
 FONTS = 'https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;800&amp;family=Caveat:wght@600;700&amp;family=Caveat+Brush&amp;family=Cormorant+Garamond:wght@500;700&amp;family=Nunito:wght@400;700&amp;family=Space+Grotesk:wght@500;700&amp;display=swap'
 CAMPJS = ('<script>window.SA_CAMP=%s</script>' % json.dumps(dict(CP, names={k: c['short'] for k, c in CATS.items()}, rankEndText=_dd(CP['rank_end'])))) if CP['enabled'] else ''
+CAMPJS += '<script>window.SA_BUNDLE=%s</script>' % json.dumps(BUNDLE)
 def head(title, desc, theme, path='', ld=(), img='', noindex=False):
     u = SITE + '/' + path.lstrip('/')
     nav = ''.join('<a href="/%s/">%s</a>' % (k, E(c['short'])) for k, c in CATS.items())
@@ -135,6 +140,10 @@ def default_faq():
             ('Which devices can I use?', 'Any phone, tablet or computer that can open a PDF. You can also print it for your own use.'),
             ('Which payment methods work?', 'UPI, cards, net banking and wallets through Razorpay.'),
             ('Can I get a refund?', 'Digital files cannot be returned once downloaded. If the file is damaged, or you were charged but did not receive it, email us within 7 days and we will fix it or refund you.')]
+def gallery_html(p):
+    ids = p.get('gallery') or []
+    imgs = ''.join('<img src="/api/img?slug=%s&amp;n=%d" alt="%s" loading="lazy" width="600" height="800">' % (E(p['slug']), n, E('%s: inside page %d' % (p['title'], i + 1))) for i, n in enumerate(ids))
+    return '<section class="panel" id="inside"%s><h2>Look inside</h2><div class="gal" id="gal">%s</div></section>' % ('' if ids else ' hidden', imgs)
 def faq_html(items):
     return '<section class="panel" id="faq"><h2>Questions</h2>%s</section>' % ''.join('<details><summary>%s</summary><p>%s</p></details>' % (E(q), E(a)) for q, a in items)
 RVFORM = '<h3>Write a review</h3><form id="rvf" data-slug="%s"><label for="rvr">Your rating</label><select id="rvr"><option value="5">★★★★★ 5 – Loved it</option><option value="4">★★★★☆ 4</option><option value="3">★★★☆☆ 3</option><option value="2">★★☆☆☆ 2</option><option value="1">★☆☆☆☆ 1</option></select><label for="rvn">Your name</label><input id="rvn" maxlength="40" autocomplete="name"><label for="rvt">Your review</label><textarea id="rvt" rows="4" maxlength="600" required></textarea><input id="rvw" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px"><button class="cta" type="submit">Submit review</button><p id="rvm" class="note" role="status">Reviews are checked before they appear. Readers who bought this PDF here get a “Verified buyer” label.</p></form>'
@@ -147,7 +156,10 @@ for p in products:
     if img: pj['image'] = {'@type': 'ImageObject', 'url': img, 'caption': ALT, 'description': ALT, 'name': p['title']}
     FAQS = [(x['q'], x['a']) for x in (p.get('faq') or []) if x.get('q') and x.get('a')] + default_faq()
     fq = {'@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [{'@type': 'Question', 'name': q, 'acceptedAnswer': {'@type': 'Answer', 'text': a}} for q, a in FAQS]}
-    FAQH = faq_html(FAQS)
+    FAQH = gallery_html(p) + faq_html(FAQS)
+    if p.get('gallery'):
+        _il = [pj['image']] if 'image' in pj else []
+        pj['image'] = _il + [{'@type': 'ImageObject', 'url': '%s/api/img?slug=%s&n=%d' % (SITE, p['slug'], n), 'caption': '%s: inside page %d' % (p['title'], i + 1), 'name': p['title']} for i, n in enumerate(p['gallery'])]
     if r:
         pj['aggregateRating'] = {'@type': 'AggregateRating', 'ratingValue': round(a, 1), 'reviewCount': len(r)}
         pj['review'] = [{'@type': 'Review', 'author': {'@type': 'Person', 'name': x['name']}, 'reviewRating': {'@type': 'Rating', 'ratingValue': x['rating']}, 'reviewBody': x['text']} for x in r]
@@ -155,6 +167,7 @@ for p in products:
     cls, inner = cvparts(p)
     rate = '<p class="rate"><span class="stars" aria-label="%.1f out of 5">%s</span> %.1f (%d review%s) · <a href="#reviews">Write a review</a></p>' % (a, stars(a), a, len(r), 's' if len(r) > 1 else '') if r else '<p class="rate note">No reviews yet. <a href="#reviews">Be the first to review</a></p>'
     buy = ('<div id="buybox" hidden><label for="buyer">Your email (we send the PDF link here)</label><input id="buyer" type="email" autocomplete="email" placeholder="you@example.com"><button class="cta" data-buy="%s">Buy now · %s</button><p id="msg" class="note" role="status"></p><p class="note">Secure payment by Razorpay: UPI, cards, net banking and wallets. After paying you return to our site and your download opens right away.</p><script src="https://checkout.razorpay.com/v1/checkout.js"></script></div>' % (E(p['slug']), INR(p['price'])))
+    buy = '<p><a id="sample" class="cta ghost" href="/api/sample?slug=%s" target="_blank" rel="noopener"%s>&#128196; Free sample PDF</a></p>' % (E(p['slug']), '' if p['sample'] else ' hidden') + buy + '<div id="bundle" hidden></div>'
     revs = ''.join('<div class="rev"><span class="stars">%s</span> <b>%s</b>%s<p>%s</p></div>' % (stars(x['rating']), E(x['name']), ' <small>Verified buyer</small>' if x.get('verified') else '', E(x['text'])) for x in r) or '<p>No reviews yet.</p>'
     revs = '<div id="revlist" data-slug="%s">%s</div>' % (E(p['slug']), revs)
     rel = [x for x in products if x['cat'] == p['cat'] and x['slug'] != p['slug']][:3]
@@ -191,6 +204,7 @@ if CP['enabled']:
 def app(title, js, path): return head(title, title, 'home', path, noindex=True) + '<main class="w" id="app"><div class="panel"><p>Loading…</p></div></main><script src="/assets/%s" defer></script>' % js + FOOT
 write('thank-you/index.html', app('Your PDF is ready', 'thanks.js', 'thank-you/'))
 write('credit/index.html', app('My referral credit', 'credit.js', 'credit/'))
+write('cart/index.html', head('Your bundle | Sharpalign', 'Your bundle', 'home', 'cart/', noindex=True) + '<main class="w" id="app"><div class="panel"><p>Loading…</p></div></main><script src="https://checkout.razorpay.com/v1/checkout.js"></script><script src="/assets/cart.js" defer></script>' + FOOT)
 write('404.html', head('Page not found', 'Page not found', 'home', noindex=True) + '<main class="w"><div class="panel"><h1>Page not found</h1><p><a href="/">Back to the shop</a></p></div></main>' + FOOT)
 today = datetime.date.today().isoformat()
 urls = [('', today), ('refer/', today), ('leaderboard/', today)] + [(k + '/', today) for k in CATS] + [(href(p).lstrip('/'), p.get('added', today)) for p in products if p['pdf']]

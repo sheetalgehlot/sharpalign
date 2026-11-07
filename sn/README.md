@@ -43,6 +43,14 @@ Option A (easy, no tools): upload the PDF to `private-pdfs/`, the cover to `cove
 Option B (Python on your computer): `python add_product.py --title "..." --cat kids --price 149 --pdf book.pdf --cover cover.jpg --pages 24 --short "..." --desc "..."`, then upload the changed files.
 The page, sitemap and Google product data are created automatically on each build. A product shows "Coming soon" until its PDF exists.
 
+## Bundles, free samples, inside pictures
+- **Bundles (buy more, pay less):** `bundle.json` sets the tiers. By default 1 PDF = full price, 2 PDFs = each at 80%, 3 PDFs = each at 70%, 5 or more = each at 60%. Product pages show a "Bundle & save" box with an Add to bundle button, a floating bar shows the bundle, and `/cart/` shows the prices, the tiers, the savings and one payment for everything. After paying, the thank-you page lists a Download button for every PDF. A launch offer or VIP price and the bundle price never stack: each PDF gets whichever is lowest. Bundles work in every currency (if one PDF has no price in a currency, the bundle falls back to dollars, then rupees). Store credit works on rupee bundles. Change `tiers` in `bundle.json` (`"enabled": false` switches bundles off).
+- **Free sample PDF:** in admin Products press "Upload sample PDF" on a product (max about 18 MB). A "Free sample PDF" button then appears on its page at once. "Open sample" lets you check it.
+- **Inside pictures:** press "Add inside pictures" on a product and select up to 12 pictures (screenshots of pages). They are shrunk automatically and shown on the product page as a scrolling "Look inside" gallery (tap to enlarge) and added to the page's Google data. "Clear pictures" removes them all.
+
+## Updating the site in one commit
+Unzip the update zip, open your repository's main page on GitHub, click Add file > Upload files, drag in everything that is inside the unzipped folder (files and folders together), and click Commit changes once. The update zips never contain your own settings files (`config.json`, `products.json`, `reviews.json`, `campaign.json`, `admin.json`, `bundle.json` after you have edited it), your `private-pdfs` and `covers`, so nothing of yours is overwritten.
+
 ## Product pages, questions, bulk upload
 - **Whole cards are clickable** on every shop list. Long descriptions are shown compactly (short lines become columns, with a Read more button) and the full text stays on the page for Google.
 - **Questions:** in the admin product form, write one question per line as `Question | Answer`. They appear on the product page (with five standard questions about downloads, devices, payment and refunds) and are added to the page's Google data (FAQPage). Google shows FAQ boxes in results only for some sites, but the text still helps the page get found.

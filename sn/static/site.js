@@ -12,7 +12,7 @@ const useful=(c,f)=>{if(f.discount_pct||f.reward_pct||f.waitlist_required)return
 const offer=(f)=>{const t=[];if(f.launch_price)t.push(CUR==='INR'?inr(f.launch_price)+' each':'special launch prices');if(f.discount_pct)t.push(f.discount_pct+'% off'+(f.waitlist_required?' for waitlist members':''));return t.join(' · ')};
 const rw=Object.entries(P).find(([c,f])=>f.reward_price||f.reward_pct);
 const live=()=>Object.entries(P).filter(([c,f])=>f.end>f.open&&Date.now()>=f.open&&Date.now()<f.end&&useful(c,f)).sort((a,b)=>a[1].end-b[1].end)[0];
-window.SA={C,inr,dt,
+window.SA={C,inr,dt,money:(n,c)=>money(n,c),
  perks:d=>(d.founder?'<p class="offer">🏅 <b>Founding Customer #'+d.founder+'</b>: '+C.perks.discount_pct+'% off any PDF, early access to new launches, free updates in My Library.</p>':'')+(d.top?'<p class="offer">🏆 <b>'+(d.top==='top10'?'Top 10':'Top 100')+' referrer</b>: '+C.perks.discount_pct+'% off any PDF, early access'+(d.top==='top10'?', free new launches':'')+'.</p>':''),
  prog:d=>{if(!C)return '';
   if(d.unlock&&d.unlock.until>Date.now())return '<p class="offer">🏆 Unlocked! All '+d.cat+' books are '+(rw?rtxt(rw[1]):'')+' for you until '+dt(d.unlock.until)+'.</p>';
@@ -66,6 +66,27 @@ if(grid)prodP.then(d=>{if(!d.live)return;
  if(fresh.length){fresh.forEach(p=>grid.insertAdjacentHTML(here?'beforeend':'afterbegin',pcard(p)));if(!here)while(grid.children.length>6)grid.lastElementChild.remove()}
  const none=document.querySelector('#shop > p.panel');if(none&&grid.children.length)none.remove();
  decorate()}).catch(()=>{});
+// ---- bundle (buy more, pay less), free sample, inside pictures ----
+const BD=window.SA_BUNDLE||{enabled:false,tiers:[]};
+const cartGet=()=>{try{return JSON.parse(g('sa_cart')||'[]')}catch(e){return []}},cartSet=a=>s('sa_cart',JSON.stringify([...new Set(a)].slice(0,BD.max_items||10)));
+const tierTxt=()=>['1 PDF: full price'].concat((BD.tiers||[]).map((t,i,a)=>t.items+(i===a.length-1?'+':'')+' PDFs: '+(100-t.pct)+'% off each')).join(' · ');
+const cbar=document.createElement('a');cbar.className='cartbar';cbar.href='/cart/';
+const cartRender=()=>{const n=cartGet().length;if(!BD.enabled||!n||location.pathname.indexOf('/cart')===0){cbar.remove();return}
+ let pc=100;for(const t of BD.tiers)if(n>=t.items)pc=t.pct;const nx=BD.tiers.find(t=>t.items>n);
+ cbar.innerHTML='🧺 <b>Bundle: '+n+' PDF'+(n>1?'s':'')+'</b>'+(pc<100?' · '+(100-pc)+'% off each':'')+(nx?' · add '+(nx.items-n)+' more for '+(100-nx.pct)+'% off':'')+' · <u>View bundle</u>';
+ if(!cbar.isConnected)document.body.appendChild(cbar)};
+cartRender();
+const bb=document.getElementById('bundle'),bslug=(document.querySelector('[data-buy]')||{dataset:{}}).dataset.buy||'';
+if(bb&&BD.enabled&&bslug){const draw=()=>{const inCart=cartGet().includes(bslug);bb.innerHTML='<div class="offer">🧺 <b>Bundle &amp; save:</b> '+tierTxt()+'</div><button class="cta ghost" id="addb" type="button">'+(inCart?'✓ In your bundle · View bundle':'＋ Add to bundle')+'</button>';
+ document.getElementById('addb').onclick=()=>{if(cartGet().includes(bslug)){location.href='/cart/';return}cartSet([...cartGet(),bslug]);draw();cartRender()}};draw()}
+const shopEl=document.getElementById('shop');
+if(shopEl&&BD.enabled&&BD.tiers.length)shopEl.insertAdjacentHTML('afterbegin','<div class="offer">🧺 <b>Bundle &amp; save:</b> '+tierTxt()+'. Open any PDF and tap Add to bundle.</div>');
+prodP.then(d=>{const f=(d.flags||{})[bslug];if(!f)return;
+ const sm=document.getElementById('sample');if(sm&&f.sample)sm.hidden=false;
+ const gal=document.getElementById('gal'),ins=document.getElementById('inside'),t0=(document.querySelector('h1')||{}).textContent||'';
+ if(gal&&f.gallery&&f.gallery.length&&!gal.innerHTML.trim())gal.innerHTML=f.gallery.map((n,i)=>'<img src="/api/img?slug='+bslug+'&n='+n+'" alt="'+esc(t0+': inside page '+(i+1))+'" loading="lazy">').join('');
+ if(ins&&gal&&gal.innerHTML.trim())ins.hidden=false});
+document.addEventListener('click',e=>{const im=e.target.closest&&e.target.closest('.gal img');if(!im)return;const o=document.createElement('div');o.className='lbx';o.innerHTML='<img src="'+im.src+'" alt="'+esc(im.alt)+'"><span>✕</span>';o.onclick=()=>o.remove();document.body.appendChild(o)});
 document.addEventListener('submit',async e=>{const w=e.target.closest('.wl');if(!w)return;e.preventDefault();const m=w.querySelector('.wm'),b=w.querySelector('button');b.disabled=true;m.textContent='Saving…';
  try{const x=await (await fetch('/api/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:w.querySelector('input[type=email]').value,cat:w.dataset.cat,website:w.querySelector('.hp').value})})).json();
  if(x.ok)w.innerHTML='<p><b>You are on the list ✓</b> We will email you when it opens.</p>';else{m.textContent=x.error||'Could not save. Please try again.';b.disabled=false}}catch(y){m.textContent='Could not save. Please try again.';b.disabled=false}});
@@ -87,10 +108,10 @@ if(jf)jf.addEventListener('submit',async e=>{e.preventDefault();const m=document
 const btn=document.querySelector('[data-buy]');if(!btn)return;
 const msg=document.getElementById('msg'),slug=btn.dataset.buy,buyer=document.getElementById('buyer');
 const load=email=>fetch('/api/quote?slug='+slug+'&ref='+g('sa_ref')+'&ck='+g('sa_ck')+'&cur='+g('sa_cur')+(email?'&email='+encodeURIComponent(email):'')).then(x=>x.json()).then(q=>{
- if(q.pay==null){if(box)box.hidden=true;if(soonEl)soonEl.innerHTML='<div class="offer">This PDF is no longer available.</div>';return}
- if(q.locked){if(box)box.hidden=true;return}
- if(!q.avail){if(box)box.hidden=true;if(soonEl&&st(cat)!=='soon')soonEl.innerHTML='<div class="offer">This PDF is coming soon.</div>';return}
- if(box)box.hidden=false;
+ if(q.pay==null){if(box)box.hidden=true;if(bb)bb.hidden=true;if(soonEl)soonEl.innerHTML='<div class="offer">This PDF is no longer available.</div>';return}
+ if(q.locked){if(box)box.hidden=true;if(bb)bb.hidden=true;return}
+ if(!q.avail){if(box)box.hidden=true;if(bb)bb.hidden=true;if(soonEl&&st(cat)!=='soon')soonEl.innerHTML='<div class="offer">This PDF is coming soon.</div>';return}
+ if(box)box.hidden=false;if(bb)bb.hidden=false;
  if(box&&st(cat)==='soon'){box.hidden=false;soonEl.innerHTML='<div class="offer">🏅 Early access for members: you can buy before the public launch.</div>'}
  const m=v=>money(v,q.currency||'INR');
  document.getElementById('price').innerHTML=q.pay<q.price?m(q.pay)+' <s>'+m(q.price)+'</s>':m(q.price);

@@ -25,10 +25,10 @@ export default async (req,context)=>{
  if(a==='chpw'){const pw=String((await req.json().catch(()=>({}))).password||'').trim();if(pw.length<PW_MIN)return json({error:'Use at least '+PW_MIN+' characters.'},400);await s.setJSON('adm/pw',hashPw(pw));return json({ok:true});}
  if(a==='pdf'){const sl=q('slug');if(!SLUG.test(sl))return json({error:'bad'},400);if(!(CAT[sl]&&CAT[sl].pdf))return new Response('No PDF has been uploaded for this product yet.',{status:404});return servePdf(sl,s,async()=>{},true);}
  if(a==='me')return json({ok:true,dirty:false});
- if(a==='orders'){const o=(await all('order/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(6),email:r.email,title:CAT[r.slug]?.title||r.slug,t:r.t,dl:r.dl}));o.sort((x,y)=>y.t-x.t);return json({items:o.slice(0,100)});}
+ if(a==='orders'){const o=(await all('order/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(6),email:r.email,title:(r.slugs||[r.slug]).map(x=>CAT[x]?.title||x).join(', '),t:r.t,dl:Object.values(r.dls||{}).reduce((a,x)=>a+x,0)+(typeof r.dl==='number'?r.dl:0)}));o.sort((x,y)=>y.t-x.t);return json({items:o.slice(0,100)});}
  if(a==='resend'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);
   await mail(r.email,'Your PDF link: '+(CAT[r.slug]?.title||r.slug),`Here is your download link again:\n${origin}/thank-you/?t=${mkToken(b.oid,r.slug,Date.now())}\n\nThe link works for ${CFG.link_days} days.\n\nSharpalign`);return json({ok:true});}
- if(a==='resetdl'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);r.dl=0;await s.setJSON('order/'+b.oid,r);return json({ok:true});}
+ if(a==='resetdl'){const b=await req.json(),r=await g('order/'+b.oid,null);if(!r)return json({error:'Order not found'},404);r.dl=0;r.dls={};await s.setJSON('order/'+b.oid,r);return json({ok:true});}
  if(a==='credit'){const o=(await all('ref/')).filter(x=>x[1]).map(([k,r])=>{const [b,p]=balance(r);return {code:k.slice(4),email:r.email,avail:b,pending:p,earned:r.ledger.reduce((n,x)=>n+(x.type==='earn'?x.amt:0),0),refs:(r.refs||[]).length,unlock:r.unlock||null};});return json({items:o});}
  if(a==='adjust'){const b=await req.json(),k='ref/'+String(b.code).toUpperCase(),r=await g(k,null),amt=parseInt(b.amt);if(!r||!amt)return json({error:'Check the code and amount'},400);r.ledger.push({t:Date.now(),type:'adj',amt});await s.setJSON(k,r);return json({ok:true});}
  if(a==='unlock'){const b=await req.json(),k='ref/'+String(b.code).toUpperCase(),r=await g(k,null);if(!r)return json({error:'Not found'},404);if(b.on)r.unlock={t:Date.now(),until:Date.now()+((rwp()||[0,{}])[1].reward_days||7)*864e5};else delete r.unlock;await s.setJSON(k,r);return json({ok:true});}
@@ -46,7 +46,7 @@ export default async (req,context)=>{
   await s.setJSON('meta/finalized',{t:Date.now(),count:rows.length});return json({ok:true,count:rows.length});}
  if(a==='reviews'){return json({items:(await all('rv/')).filter(x=>x[1]).map(([k,r])=>({oid:k.slice(3),title:CAT[r.slug]?.title||r.slug,...r,status:r.status||'pending'}))});}
  if(a==='reviewset'){const b=await req.json(),k='rv/'+b.oid,r=await g(k,null);if(!r)return json({error:'Not found'},404);r.status=['approved','rejected'].includes(b.status)?b.status:'pending';await s.setJSON(k,r);await mark();return json({ok:true});}
- if(a==='products'){return json({items:Object.entries(CAT).map(([sl,p])=>({slug:sl,title:p.title,cat:p.cat,price:p.price,source:p.source,pdf:!!p.pdf,pdfmeta:p.pdfmeta||null,cover:!!p.cover,rec:p.rec||null}))});}
+ if(a==='products'){return json({items:Object.entries(CAT).map(([sl,p])=>({slug:sl,title:p.title,cat:p.cat,price:p.price,source:p.source,pdf:!!p.pdf,pdfmeta:p.pdfmeta||null,sample:!!p.sample,gallery:(p.gallery||[]).length,cover:!!p.cover,rec:p.rec||null}))});}
  if(a==='save'){const b=await req.json(),title=String(b.title||'').trim().slice(0,120),cat=String(b.cat),price=parseInt(b.price);
   const slug=String(b.slug||'')||title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80);
   if(!title||!CATS.includes(cat)||!(price>0)||!SLUG.test(slug))return json({error:'Please fill title, section and price.'},400);
@@ -54,14 +54,28 @@ export default async (req,context)=>{
   if(!b.slug&&(old||Object.hasOwn(CAT,slug)))return json({error:'A product with this title already exists.'},400);
   const rec={slug,cat,title,price,pages:parseInt(b.pages)||0,emoji:String(b.emoji||'📘').slice(0,4),color:/^#[0-9a-f]{6}$/i.test(b.color)?b.color:'#3b82f6',prices:(()=>{const o={};for(const c of ['USD','EUR','GBP']){const v=Math.round(parseFloat((b.prices||{})[c])*100)/100;if(v>=0.5&&v<=100000)o[c]=v;}return o;})(),alt:String(b.alt||'').trim().slice(0,200),faq:String(b.faq||'').split('\n').map(l=>l.trim()).filter(Boolean).slice(0,12).map(l=>{const i=l.indexOf('|');return i>0?{q:l.slice(0,i).trim().slice(0,200),a:l.slice(i+1).trim().slice(0,800)}:null}).filter(x=>x&&x.q&&x.a),short:String(b.short||'').slice(0,160),desc:String(b.desc||'').slice(0,4000),added:old?.added||new Date().toISOString().slice(0,10)};
   await s.setJSON('adm/products',[...ap.filter(x=>x.slug!==slug),rec]);await mark();return json({slug});}
+ if(a==='setprices'){const b=await req.json().catch(()=>({})),items=Array.isArray(b.items)?b.items.slice(0,300):[];let ap=await g('adm/products',[]),n=0;
+  const pp=o=>{const r={};for(const c of ['USD','EUR','GBP']){const v=Math.round(parseFloat((o||{})[c])*100)/100;if(v>=0.5&&v<=100000)r[c]=v;}return r;};
+  for(const it of items){const sl=String(it.slug||''),price=parseInt(it.price);if(!SLUG.test(sl)||!(price>0))continue;
+   let rec=ap.find(x=>x.slug===sl);
+   if(!rec){const c=CAT[sl];if(!c)continue;rec={slug:sl,cat:c.cat,title:c.title,price:c.price,pages:0,emoji:c.emoji||'📘',color:c.color||'#3b82f6',short:c.short||'',desc:'',added:c.added||new Date().toISOString().slice(0,10)};ap=[...ap,rec];}
+   rec.price=price;rec.prices=pp(it.prices);n++;}
+  await s.setJSON('adm/products',ap);await mark();return json({ok:true,updated:n});}
  if(a==='delete'){const sl=String((await req.json()).slug),ap=await g('adm/products',[]);await s.setJSON('adm/products',ap.filter(x=>x.slug!==sl));
   if(Object.hasOwn(P,sl)){const rm=await g('adm/removed',[]);if(!rm.includes(sl))await s.setJSON('adm/removed',[...rm,sl]);}await mark();return json({ok:true});}
  if(a==='chunk'){const sl=q('slug'),i=parseInt(q('i')),n=parseInt(q('n')),size=parseInt(q('size')),buf=await req.arrayBuffer();
   if(!SLUG.test(sl)||!(n>0&&n<=6)||!(i>=0&&i<n)||buf.byteLength>4.2e6)return json({error:'Bad upload (each PDF must be under about 18 MB)'},400);
   if(i===0&&Buffer.from(buf.slice(0,5)).toString()!=='%PDF-')return json({error:'That file is not a PDF'},400);
-  await s.set(`pdf/${sl}/${i}`,buf);
-  if(i===n-1){const pd=await g('adm/pdfs',{});pd[sl]={parts:n,size,t:Date.now()};await s.setJSON('adm/pdfs',pd);await mark();}
+  const kd=q('kind')==='sample'?'sample':'pdf',ix=kd==='sample'?'adm/samples':'adm/pdfs';
+  await s.set(`${kd}/${sl}/${i}`,buf);
+  if(i===n-1){const pd=await g(ix,{});pd[sl]={parts:n,size,t:Date.now()};await s.setJSON(ix,pd);await mark();}
   return json({ok:true});}
+ if(a==='sample'){const sl=q('slug');if(!SLUG.test(sl))return json({error:'bad'},400);return servePdf(sl,s,async()=>{},true,'sample');}
+ if(a==='img'){const sl=q('slug'),buf=await req.arrayBuffer(),b=Buffer.from(buf);
+  if(!SLUG.test(sl)||!CAT[sl]||buf.byteLength>9e5||b[0]!==0xFF||b[1]!==0xD8)return json({error:'Each picture must be a JPEG under 900 KB'},400);
+  const gl=await g('adm/gallery',{}),list=gl[sl]||[];if(list.length>=12)return json({error:'At most 12 pictures per product. Clear them first.'},400);
+  const id=(list.length?Math.max(...list):0)+1;await s.set(`img/${sl}/${id}`,buf);gl[sl]=[...list,id];await s.setJSON('adm/gallery',gl);await mark();return json({ok:true,n:id});}
+ if(a==='imgclear'){const sl=String((await req.json().catch(()=>({}))).slug||''),gl=await g('adm/gallery',{});delete gl[sl];await s.setJSON('adm/gallery',gl);await mark();return json({ok:true});}
  if(a==='cover'){const sl=q('slug'),buf=await req.arrayBuffer(),b=Buffer.from(buf);
   if(!SLUG.test(sl)||buf.byteLength>9e5||b[0]!==0xFF||b[1]!==0xD8)return json({error:'Cover must be a JPEG under 900 KB'},400);
   await s.set('cover/'+sl,buf);const cv=await g('adm/covers',{});cv[sl]=1;await s.setJSON('adm/covers',cv);await mark();return json({ok:true});}

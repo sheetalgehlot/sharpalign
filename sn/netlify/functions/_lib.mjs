@@ -19,10 +19,10 @@ export const bust=()=>{CATC=null;};
 export async function catalog(){
  if(CATC&&Date.now()-CATT<15000)return CATC;
  const s=store(),g=async(k,d)=>(await s.get(k,{type:'json'}))||d;
- const [ap,pd,cv,rm]=await Promise.all([g('adm/products',[]),g('adm/pdfs',{}),g('adm/covers',{}),g('adm/removed',[])]);
+ const [ap,pd,cv,rm,sm,gl]=await Promise.all([g('adm/products',[]),g('adm/pdfs',{}),g('adm/covers',{}),g('adm/removed',[]),g('adm/samples',{}),g('adm/gallery',{})]);
  const out={};
- for(const [k,v] of Object.entries(P)){if(rm.includes(k))continue;out[k]={...v,pdf:!!(v.pdf||pd[k]),cover:!!cv[k],source:'file',pdfmeta:pd[k]||null};}
- for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,prices:p.prices||{},cat:p.cat,short:p.short,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin',pdfmeta:pd[p.slug]||null};}
+ for(const [k,v] of Object.entries(P)){if(rm.includes(k))continue;out[k]={...v,pdf:!!(v.pdf||pd[k]),cover:!!cv[k],source:'file',pdfmeta:pd[k]||null,sample:!!sm[k],gallery:gl[k]||[]};}
+ for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,prices:p.prices||{},img:old&&old.img,cat:p.cat,short:p.short,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin',pdfmeta:pd[p.slug]||null,sample:!!sm[p.slug],gallery:gl[p.slug]||[]};}
  CATC=out;CATT=Date.now();return out;}
 export const productA=async s=>{const c=await catalog();return Object.hasOwn(c,s)?c[s]:null;};
 export async function reviewsFor(slug){const s=store(),out=[];for(const b of (await s.list({prefix:'rv/'})).blobs){const r=await s.get(b.key,{type:'json'});if(r&&r.status==='approved'&&(!slug||r.slug===slug))out.push({slug:r.slug,name:r.name,rating:r.rating,text:r.text,date:r.date,verified:!!r.verified});}return out;}
@@ -38,6 +38,9 @@ export async function mail(to,subject,text){const k=env('BREVO_API_KEY');if(!k||
 export const getRef=async c=>/^[A-F0-9]{8}$/.test(c||'')?store().get('ref/'+c,{type:'json'}):null;
 export const balance=r=>{const n=Date.now();let b=0,p=0;for(const x of r.ledger){if(x.type==='earn'){if(x.avail<=n)b+=x.amt;else p+=x.amt;}else if(x.type==='spend')b-=x.amt;else b+=x.amt;}return [b,p];};
 export const CP=CFG.campaign||{};
+export const BD=CFG.bundle||{enabled:false,tiers:[],max_items:10};
+// bundle: the more PDFs in one order, the lower the percentage of the price you pay for each
+export const bundlePct=n=>{let p=100;if(BD.enabled)for(const t of BD.tiers||[])if(n>=t.items)p=t.pct;return p;};
 export const phase=c=>CP.enabled?(CP.phases||{})[c]||null:null;
 export const stateOf=(c,n=Date.now())=>{const f=phase(c);return !f?'open':n<f.open?'soon':n<f.end?'launch':'after';};
 export const rwp=()=>Object.entries(CP.phases||{}).find(([c,f])=>f.reward_price||f.reward_pct);
@@ -61,7 +64,7 @@ export function pickCurrency(p,country,req){const want=currencyFor(country,req),
 const r2=n=>Math.round(n*100)/100;
 export async function quote(p,email,ref,ck,opt={}){
  const now=Date.now(),f=phase(p.cat),cc=keyCode(ck),rk=cc?await getRef(cc):null,re=email?await getRef(rcode(email)):null;
- const cur=pickCurrency(p,opt.country,opt.cur),pc=cur==='INR'?p.price:p.prices[cur],ratio=pc/p.price,conv=v=>cur==='INR'?v:r2(v*ratio);
+ const cur=(opt.forceCur||pickCurrency(p,opt.country,opt.cur)),pc=cur==='INR'?p.price:p.prices[cur],ratio=pc/p.price,conv=v=>cur==='INR'?v:r2(v*ratio);
  const perk=hasPerk(rk)||hasPerk(re),unl=unlockOn(rk)||unlockOn(re);
  const q={price:pc,base:pc,tag:'',fd:0,credit:0,ref:'',cr:'',pay:pc,pay_inr:p.price,currency:cur,state:stateOf(p.cat,now),locked:false,wl:false,avail:!!p.pdf};
  const early=((CP.perks||{}).early_hours||0)*36e5;
@@ -73,10 +76,11 @@ export async function quote(p,email,ref,ck,opt={}){
   else q.wl=true;}
  if(f&&unl&&(f.reward_price||f.reward_pct)){const rv=Math.min(f.reward_price||Infinity,f.reward_pct?Math.floor(p.price*(100-f.reward_pct)/100):Infinity);if(rv<base){base=rv;tag='reward';}}
  if(perk&&CP.perks){const v=Math.floor(p.price*(100-CP.perks.discount_pct)/100);if(v<base){base=v;tag='perk';}}
+ if(opt.bundlePct&&opt.bundlePct<100){const v=Math.floor(p.price*opt.bundlePct/100);if(v<base){base=v;tag='bundle';}}
  q.tag=tag;
  const rr=await getRef(ref);let fd=0,credit=0,crc='';
  if(rr&&(!email||(rr.email!==email.toLowerCase()&&!isBuyer(re)))){q.ref=ref;fd=Math.floor(base*CFG.friend_discount_pct/100);}
- if(rk&&cur==='INR'){const c=Math.max(0,Math.min(balance(rk)[0],Math.floor((base-fd)*CFG.credit_max_pct/100)));if(c>0){credit=c;crc=cc;}} // store credit is in rupees
+ if(rk&&cur==='INR'&&!opt.noCredit){const c=Math.max(0,Math.min(balance(rk)[0],Math.floor((base-fd)*CFG.credit_max_pct/100)));if(c>0){credit=c;crc=cc;}} // store credit is in rupees
  const floor=Math.ceil(p.price*(CP.min_pay_pct||0)/100);let pay=base-fd-credit;
  if(pay<floor){let need=floor-pay;const d=Math.min(need,credit);credit-=d;need-=d;if(need>0)fd-=Math.min(need,fd);if(credit===0)crc='';pay=base-fd-credit;}
  q.base=conv(base);q.fd=conv(fd);q.credit=credit;q.cr=crc;q.pay_inr=Math.max(1,pay);q.pay=cur==='INR'?Math.max(1,pay):Math.max(0.5,r2(pay*ratio));
@@ -88,7 +92,7 @@ async function ledger(oid,em,o,n,origin){
   const m=(await s.get('meta/founders',{type:'json'}))||{n:0};
   if(CP.enabled&&!rec.founder&&m.n<((CP.perks||{}).founders||0)){m.n++;await s.setJSON('meta/founders',m);rec.founder=m.n;}
   me=rec;}
- me.bought=me.bought||[];if(n.slug&&!me.bought.some(b=>b.slug===n.slug))me.bought.push({slug:n.slug,oid,t:now});
+ me.bought=me.bought||[];(n.slugs||[n.slug]).forEach(sl=>{if(sl&&!me.bought.some(b=>b.slug===sl))me.bought.push({slug:sl,oid,t:now});});
  await s.setJSON('ref/'+code,me);
  const cr=parseInt(n.credit||0);
  if(cr>0&&n.cr){const r=await getRef(n.cr);if(r){r.ledger.push({t:now,type:'spend',amt:cr,order:oid});await s.setJSON('ref/'+n.cr,r);}}
@@ -105,15 +109,18 @@ async function ledger(oid,em,o,n,origin){
 export async function fulfil(oid,origin){
  const o=await rzp('GET','orders/'+encodeURIComponent(oid));
  if(o.status!=='paid')return null;
- const n=o.notes||{},p=await productA(n.slug||''),em=String(n.email||'').toLowerCase();
- if(!p||!em)return null;
+ const n=o.notes||{},em=String(n.email||'').toLowerCase(),cat=await catalog();
+ let slugs=[n.slug];if(n.cid){const c=await store().get('cart/'+n.cid,{type:'json'});if(c&&Array.isArray(c.slugs))slugs=c.slugs;}
+ slugs=slugs.filter(x=>x&&Object.hasOwn(cat,x));
+ if(!slugs.length||!em)return null;
+ n.slugs=slugs;n.slug=slugs[0];const p={title:slugs.map(x=>cat[x].title).join(', ')};
  const tok=mkToken(oid,n.slug,(o.created_at||0)*1000),s=store(),k='order/'+oid;
  if(await s.get(k,{type:'json'}))return tok;
- const w=await s.setJSON(k,{slug:n.slug,email:em,t:Date.now(),dl:0},{onlyIfNew:true});
+ const w=await s.setJSON(k,{slug:slugs[0],slugs,email:em,t:Date.now(),dl:0,dls:{}},{onlyIfNew:true});
  if(w&&w.modified===false)return tok;
  await ledger(oid,em,o,n,origin);
  const code=rcode(em),rec=await getRef(code),fl=rec&&rec.founder?`\n\n🏅 You are Founding Customer #${rec.founder}: ${CP.perks.discount_pct}% off any PDF, early access to new launches and free updates to every PDF you buy (see My Library on your private page).`:'';
- await mail(em,'Your PDF: '+p.title,`Thank you for your purchase!\n\nDownload "${p.title}" here:\n${origin}/thank-you/?t=${tok}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
+ await mail(em,(slugs.length>1?'Your PDFs: ':'Your PDF: ')+p.title,`Thank you for your purchase!\n\nDownload ${slugs.length>1?'these '+slugs.length+' PDFs':'"'+p.title+'"'} here:\n${origin}/thank-you/?t=${tok}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
  await mail(CFG.owner_email,'New sale: '+p.title,`${em} bought ${p.title} for ${o.currency||'INR'} ${((o.amount_paid||0)/100).toFixed(2)}.\nOrder: ${oid}`);
  return tok;}
 // ---- admin ----
@@ -127,14 +134,36 @@ export const passOk=p=>{const a=env('ADMIN_PASSWORD'),t=env('TOKEN_SECRET'),want
 export async function passOkAsync(p){const saved=await store().get('adm/pw',{type:'json'});if(saved&&saved.salt)return safe(scryptSync(String(p).trim(),saved.salt,32).toString('hex'),saved.hash);return passOk(p);}
 
 // Sends a PDF to the browser (from the admin upload, or from the files bundled with the site).
-export async function servePdf(slug,s,count,inline){
- const H=len=>({'content-type':'application/pdf','content-disposition':`${inline?'inline':'attachment'}; filename="${slug}.pdf"`,'content-length':String(len),'x-robots-tag':'noindex','cache-control':'private, no-store'});
- const m=((await s.get('adm/pdfs',{type:'json'}))||{})[slug];
+export async function servePdf(slug,s,count,inline,kind='pdf'){
+ const H=len=>({'content-type':'application/pdf','content-disposition':`${inline?'inline':'attachment'}; filename="${slug}${kind==='sample'?'-sample':''}.pdf"`,'content-length':String(len),'x-robots-tag':'noindex','cache-control':'private, no-store'});
+ const m=((await s.get(kind==='sample'?'adm/samples':'adm/pdfs',{type:'json'}))||{})[slug];
  if(m){await count();let i=0;
-  return new Response(new ReadableStream({async pull(c){if(i>=m.parts){c.close();return;}const b=await s.get(`pdf/${slug}/${i++}`,{type:'arrayBuffer'});if(!b){c.error(new Error('missing part'));return;}c.enqueue(new Uint8Array(b));}}),{headers:H(m.size)});}
+  return new Response(new ReadableStream({async pull(c){if(i>=m.parts){c.close();return;}const b=await s.get(`${kind==='sample'?'sample':'pdf'}/${slug}/${i++}`,{type:'arrayBuffer'});if(!b){c.error(new Error('missing part'));return;}c.enqueue(new Uint8Array(b));}}),{headers:H(m.size)});}
+ if(kind==='sample')return new Response('No sample for this PDF yet.',{status:404});
  const file=slug+'.pdf',here=path.dirname(new URL(import.meta.url).pathname);
  const f=[path.join(process.env.LAMBDA_TASK_ROOT||'/var/task','private-pdfs',file),path.join(process.cwd(),'private-pdfs',file),path.join(here,'../../private-pdfs',file)].find(existsSync);
  if(!f)return new Response('File not found. Please contact us.',{status:404});
  await count();
  return new Response(Readable.toWeb(createReadStream(f)),{headers:H(statSync(f).size)});
+}
+
+// Price for a whole bundle (several PDFs in one order) in one currency.
+export async function quoteCart(slugs,email,ref,ck,opt={}){
+ const list=[...new Set((slugs||[]).map(String))].slice(0,BD.max_items||10);
+ if(!list.length)return {error:'Your bundle is empty.'};
+ const cat=await catalog(),prods=list.map(s=>Object.hasOwn(cat,s)?{slug:s,...cat[s]}:null);
+ if(prods.some(x=>!x))return {error:'One of the PDFs is no longer available.',bad:list.filter(x=>!Object.hasOwn(cat,x))};
+ const want=currencyFor(opt.country,opt.cur);
+ const cur=want==='INR'?'INR':(prods.every(p=>(p.prices||{})[want]>0)?want:(prods.every(p=>(p.prices||{}).USD>0)?'USD':'INR'));
+ const pct=bundlePct(list.length),qs=[];
+ for(const p of prods)qs.push(await quote(p,email,ref,ck,{...opt,forceCur:cur,bundlePct:pct,noCredit:true}));
+ if(qs.some(q=>q.locked))return {error:'One of the PDFs has not opened yet.',bad:list.filter((x,i)=>qs[i].locked)};
+ if(qs.some(q=>!q.avail))return {error:'One of the PDFs is not available yet.',bad:list.filter((x,i)=>!qs[i].avail)};
+ const totalInr=qs.reduce((a,q)=>a+q.pay_inr,0),cc=keyCode(ck),rk=cc?await getRef(cc):null;let credit=0,crc='';
+ if(rk&&cur==='INR'){const fl=prods.reduce((a,p)=>a+Math.ceil(p.price*(CP.min_pay_pct||0)/100),0);credit=Math.max(0,Math.min(balance(rk)[0],Math.floor(totalInr*CFG.credit_max_pct/100),totalInr-fl));if(credit>0)crc=cc;}
+ const totalCur=cur==='INR'?totalInr-credit:r2(qs.reduce((a,q)=>a+q.pay,0));
+ return {currency:cur,pct,count:list.length,
+  items:prods.map((p,i)=>({slug:p.slug,title:p.title,cat:p.cat,thumb:p.cover?'/api/cover?slug='+p.slug:(p.img?'/covers/'+p.img:''),emoji:p.emoji||'📘',color:p.color||'#3b82f6',price:qs[i].price,pay:qs[i].pay,tag:qs[i].tag})),
+  regular:cur==='INR'?prods.reduce((a,p)=>a+p.price,0):r2(qs.reduce((a,q)=>a+q.price,0)),
+  total:Math.max(cur==='INR'?1:0.5,totalCur),total_inr:Math.max(1,totalInr-credit),credit,cr:crc,ref:qs[0].ref};
 }

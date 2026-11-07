@@ -10,7 +10,7 @@ export default async (req,context)=>{
  const rv={name:cl(b.name,40)||'Reader',rating:Math.max(1,Math.min(5,parseInt(b.rating)||5)),text:cl(b.text,600),date:new Date().toISOString().slice(0,10),status:'pending'};
  if(rv.text.length<3)return json({error:'Please write a few words.'},400);
  let k;
- if(b.t){const t=readToken(b.t);if(!t)return json({error:'Invalid link'},400);k='rv/'+t.o;if(await s.get(k,{type:'json'}))return json({ok:true});rv.slug=t.s;rv.verified=true;}
+ if(b.t){const t=readToken(b.t);if(!t)return json({error:'Invalid link'},400);const od=await s.get('order/'+t.o,{type:'json'}),sl=od&&(od.slugs||[od.slug]).includes(String(b.slug||''))?String(b.slug):t.s;k='rv/'+t.o+(sl===t.s?'':'-'+sl);if(await s.get(k,{type:'json'}))return json({ok:true});rv.slug=sl;rv.verified=true;}
  else{
   if(!(await productA(String(b.slug||''))))return json({error:'Unknown PDF'},404);
   const ip=context?.ip||req.headers.get('x-nf-client-connection-ip')||'?',rk='rl/'+createHash('sha256').update(ip+rv.date).digest('hex').slice(0,24),n=(await s.get(rk,{type:'json'}))||{c:0};

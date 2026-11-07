@@ -1,0 +1,9 @@
+{
+ "enabled": true,
+ "max_items": 10,
+ "tiers": [
+  {"items": 2, "pct": 80},
+  {"items": 3, "pct": 70},
+  {"items": 5, "pct": 60}
+ ]
+}
