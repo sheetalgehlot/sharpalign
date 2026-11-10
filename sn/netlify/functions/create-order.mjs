@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import {json,quote,quoteCart,rzp,env,productA,store} from './_lib.mjs';
+import {json,quote,quoteCart,bundleOffer,getRef,rcode,isBuyer,rzp,env,productA,store} from './_lib.mjs';
 export default async (req,context)=>{
  if(req.method!=='POST')return json({error:'POST only'},405);
  const b=await req.json().catch(()=>({})),email=String(b.email||'').trim();
@@ -7,7 +7,13 @@ export default async (req,context)=>{
  const opt={country:context&&context.geo&&context.geo.country&&context.geo.country.code,cur:String(b.cur||'')};
  const list=Array.isArray(b.slugs)?[...new Set(b.slugs.map(String))]:[];
  let notes,amount,currency,title,first;
- if(list.length>1){ // a bundle of several PDFs: one payment, one price
+ if(b.bundle){ // a section bundle: all PDFs of a section at the price the admin set
+  const o=await bundleOffer(String(b.bundle),opt.country,opt.cur);if(o.error)return json({error:o.error},409);
+  const rr=await getRef(String(b.ref||'')),re=await getRef(rcode(email));let ref='';if(rr&&rr.email!==email.toLowerCase()&&!isBuyer(re))ref=String(b.ref);
+  const cid=randomBytes(8).toString('hex');await store().setJSON('cart/'+cid,{slugs:o.slugs,email,bundle:o.b.id,t:Date.now()});
+  first=o.slugs[0];notes={slug:first,cid,email,cur:o.currency,inr:String(o.inr),bundle:o.b.id};if(ref)notes.ref=ref;
+  amount=Math.round(o.price*100);currency=o.currency;title=o.b.title;
+ }else if(list.length>1){ // several PDFs picked one by one: one payment, one price
   const c=await quoteCart(list,email,String(b.ref||''),String(b.ck||''),opt);
   if(c.error)return json({error:c.error},409);
   const cid=randomBytes(8).toString('hex');

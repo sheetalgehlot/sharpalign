@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {json,store,env,mail,P,catalog,bust,servePdf,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
+import {json,store,env,mail,P,catalog,bust,servePdf,bundleLive,CFG,CP,rwp,rkey,rcode,mkToken,mkAdmin,isAdmin,passOkAsync,hashPw,same,PW_MIN,balance} from './_lib.mjs';
 const SLUG=/^[a-z0-9-]{1,80}$/,CATS=['kids','cooking','journals','novels','trading'];
 export default async (req,context)=>{
  const u=new URL(req.url),a=u.searchParams.get('a')||'',q=k=>u.searchParams.get(k)||'',s=store(),origin=u.origin;
@@ -54,6 +54,14 @@ export default async (req,context)=>{
   if(!b.slug&&(old||Object.hasOwn(CAT,slug)))return json({error:'A product with this title already exists.'},400);
   const rec={slug,cat,title,price,pages:parseInt(b.pages)||0,emoji:String(b.emoji||'📘').slice(0,4),color:/^#[0-9a-f]{6}$/i.test(b.color)?b.color:'#3b82f6',prices:(()=>{const o={};for(const c of ['USD','EUR','GBP']){const v=Math.round(parseFloat((b.prices||{})[c])*100)/100;if(v>=0.5&&v<=100000)o[c]=v;}return o;})(),alt:String(b.alt||'').trim().slice(0,200),faq:String(b.faq||'').split('\n').map(l=>l.trim()).filter(Boolean).slice(0,12).map(l=>{const i=l.indexOf('|');return i>0?{q:l.slice(0,i).trim().slice(0,200),a:l.slice(i+1).trim().slice(0,800)}:null}).filter(x=>x&&x.q&&x.a),short:String(b.short||'').slice(0,160),desc:String(b.desc||'').slice(0,4000),added:old?.added||new Date().toISOString().slice(0,10)};
   await s.setJSON('adm/products',[...ap.filter(x=>x.slug!==slug),rec]);await mark();return json({slug});}
+ if(a==='bundles'){const bl=await g('adm/bundles',[]);return json({items:bl.map(b=>({...b,count:Object.values(CAT).filter(p=>p.cat===b.cat&&p.pdf).length,live:bundleLive(b)}))});}
+ if(a==='bundlesave'){const b=await req.json().catch(()=>({})),cat=String(b.cat||''),price=parseInt(b.price);
+  if(!CATS.includes(cat)||!(price>0))return json({error:'Choose a section and a rupee price.'},400);
+  const num=v=>{const x=Number(v);return x>0?Math.round(x):0},pr={};for(const c of ['USD','EUR','GBP']){const v=Math.round(parseFloat((b.prices||{})[c])*100)/100;if(v>=0.5&&v<=100000)pr[c]=v;}
+  const bl=await g('adm/bundles',[]),id=String(b.id||'')||Math.random().toString(36).slice(2,10);
+  const rec={id,cat,title:String(b.title||'').trim().slice(0,100)||('All '+cat+' PDFs'),text:String(b.text||'').trim().slice(0,200),price,prices:pr,starts:num(b.starts),ends:num(b.ends),active:b.active!==false};
+  await s.setJSON('adm/bundles',[...bl.filter(x=>x.id!==id),rec]);return json({ok:true,id});}
+ if(a==='bundledel'){const id=String((await req.json().catch(()=>({}))).id||'');await s.setJSON('adm/bundles',(await g('adm/bundles',[])).filter(x=>x.id!==id));return json({ok:true});}
  if(a==='setprices'){const b=await req.json().catch(()=>({})),items=Array.isArray(b.items)?b.items.slice(0,300):[];let ap=await g('adm/products',[]),n=0;
   const pp=o=>{const r={};for(const c of ['USD','EUR','GBP']){const v=Math.round(parseFloat((o||{})[c])*100)/100;if(v>=0.5&&v<=100000)r[c]=v;}return r;};
   for(const it of items){const sl=String(it.slug||''),price=parseInt(it.price);if(!SLUG.test(sl)||!(price>0))continue;

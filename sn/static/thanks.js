@@ -5,7 +5,7 @@ if(!t){const e=q.get('e');el.innerHTML=box(e==='2'?'<h1>Payment received</h1><p>
 let d={};try{d=await (await fetch('/api/order-info?t='+encodeURIComponent(t))).json()}catch(e){}
 if(!d.title){el.innerHTML=box('<h1>Link expired</h1><p>Please contact us and we will help.</p>');return}
 try{localStorage.setItem('sa_ck',d.key)}catch(e){}
-try{localStorage.removeItem('sa_cart')}catch(e){}
+try{localStorage.removeItem('sa_cart');if(d.bundle)localStorage.setItem('sa_bdbuy_'+d.bundle,'1')}catch(e){}
 const items=d.items&&d.items.length?d.items:[{slug:'',title:d.title}],multi=items.length>1;
 const ln=location.origin+'/?ref='+d.code,S=window.SA;
 el.innerHTML=box('<h1>Thank you! '+(multi?'Your '+items.length+' PDFs are ready':'Your PDF is ready')+'</h1>'+items.map(i=>'<p><b>'+h(i.title)+'</b><br><a class="cta" href="/api/download?t='+encodeURIComponent(t)+(i.slug?'&slug='+encodeURIComponent(i.slug):'')+'">Download PDF</a></p>').join('')+'<p class="note">We also emailed this link to you. It works for '+d.days+' days.</p>')

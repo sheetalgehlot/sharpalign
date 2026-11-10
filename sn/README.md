@@ -43,6 +43,14 @@ Option A (easy, no tools): upload the PDF to `private-pdfs/`, the cover to `cove
 Option B (Python on your computer): `python add_product.py --title "..." --cat kids --price 149 --pdf book.pdf --cover cover.jpg --pages 24 --short "..." --desc "..."`, then upload the changed files.
 The page, sitemap and Google product data are created automatically on each build. A product shows "Coming soon" until its PDF exists.
 
+## Section bundles (you set the price and the timer)
+In the admin page open **Bundles**. Choose a section (Cooking, Kids, Journals, Novels or Trading), type one price in rupees (and optionally dollars, euros, pounds), and set when it is available: leave "from" empty to start at once, then set "until" or press 24 hours / 3 days / 7 days / 30 days. While a bundle is live, a popup offers it on every page of the site with a countdown, an email box and a Pay button. After the visitor closes it, a small "bundle" button stays at the bottom of the screen for 8 hours. Buyers get every PDF in that section that has a file at the moment they buy, they pay the same price even if they already own some of them, and a friend's link still earns the referrer their reward. When the end time passes, the popup disappears and the bundle can no longer be bought. Pause or delete a bundle any time.
+
+Site address and your email: the build uses `https://sharpalign.shop` if `config.json` still has the placeholder address. You can also set `SITE_URL` and `OWNER_EMAIL` in Netlify's environment variables. `OWNER_EMAIL` is where sale and review alerts are sent and the email shown on the contact and policy pages. The sitemap is built from the live product list at `/sitemap.xml`.
+
+## Pick-your-own percent-off bundles (OFF by default)
+The older percent-off tiers in `bundle.json` (2 PDFs 20% off, and so on) are switched off. To use them add `"multi_discount": true` to `bundle.json`.
+
 ## Bundles, free samples, inside pictures
 - **Bundles (buy more, pay less):** `bundle.json` sets the tiers. By default 1 PDF = full price, 2 PDFs = each at 80%, 3 PDFs = each at 70%, 5 or more = each at 60%. Product pages show a "Bundle & save" box with an Add to bundle button, a floating bar shows the bundle, and `/cart/` shows the prices, the tiers, the savings and one payment for everything. After paying, the thank-you page lists a Download button for every PDF. A launch offer or VIP price and the bundle price never stack: each PDF gets whichever is lowest. Bundles work in every currency (if one PDF has no price in a currency, the bundle falls back to dollars, then rupees). Store credit works on rupee bundles. Change `tiers` in `bundle.json` (`"enabled": false` switches bundles off).
 - **Free sample PDF:** in admin Products press "Upload sample PDF" on a product (max about 18 MB). A "Free sample PDF" button then appears on its page at once. "Open sample" lets you check it.

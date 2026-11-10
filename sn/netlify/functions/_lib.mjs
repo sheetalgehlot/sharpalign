@@ -39,6 +39,7 @@ export const getRef=async c=>/^[A-F0-9]{8}$/.test(c||'')?store().get('ref/'+c,{t
 export const balance=r=>{const n=Date.now();let b=0,p=0;for(const x of r.ledger){if(x.type==='earn'){if(x.avail<=n)b+=x.amt;else p+=x.amt;}else if(x.type==='spend')b-=x.amt;else b+=x.amt;}return [b,p];};
 export const CP=CFG.campaign||{};
 export const BD=CFG.bundle||{enabled:false,tiers:[],max_items:10};
+export const bundleLive=(b,n=Date.now())=>!!b&&b.active!==false&&(!b.starts||n>=b.starts)&&(!b.ends||n<b.ends);
 // bundle: the more PDFs in one order, the lower the percentage of the price you pay for each
 export const bundlePct=n=>{let p=100;if(BD.enabled)for(const t of BD.tiers||[])if(n>=t.items)p=t.pct;return p;};
 export const phase=c=>CP.enabled?(CP.phases||{})[c]||null:null;
@@ -116,11 +117,11 @@ export async function fulfil(oid,origin){
  n.slugs=slugs;n.slug=slugs[0];const p={title:slugs.map(x=>cat[x].title).join(', ')};
  const tok=mkToken(oid,n.slug,(o.created_at||0)*1000),s=store(),k='order/'+oid;
  if(await s.get(k,{type:'json'}))return tok;
- const w=await s.setJSON(k,{slug:slugs[0],slugs,email:em,t:Date.now(),dl:0,dls:{}},{onlyIfNew:true});
+ const w=await s.setJSON(k,{slug:slugs[0],slugs,bundle:n.bundle||'',email:em,t:Date.now(),dl:0,dls:{}},{onlyIfNew:true});
  if(w&&w.modified===false)return tok;
  await ledger(oid,em,o,n,origin);
  const code=rcode(em),rec=await getRef(code),fl=rec&&rec.founder?`\n\n🏅 You are Founding Customer #${rec.founder}: ${CP.perks.discount_pct}% off any PDF, early access to new launches and free updates to every PDF you buy (see My Library on your private page).`:'';
- await mail(em,(slugs.length>1?'Your PDFs: ':'Your PDF: ')+p.title,`Thank you for your purchase!\n\nDownload ${slugs.length>1?'these '+slugs.length+' PDFs':'"'+p.title+'"'} here:\n${origin}/thank-you/?t=${tok}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
+ await mail(em,(slugs.length>3?'Your '+slugs.length+' PDFs from Sharpalign':(slugs.length>1?'Your PDFs: ':'Your PDF: ')+p.title),`Thank you for your purchase!\n\nDownload ${slugs.length>1?'these '+slugs.length+' PDFs':'"'+p.title+'"'} here:\n${origin}/thank-you/?t=${tok}${slugs.length>1?'\n\nIncluded:\n'+slugs.map(x=>'- '+cat[x].title).join('\n'):''}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
  await mail(CFG.owner_email,'New sale: '+p.title,`${em} bought ${p.title} for ${o.currency||'INR'} ${((o.amount_paid||0)/100).toFixed(2)}.\nOrder: ${oid}`);
  return tok;}
 // ---- admin ----
@@ -166,4 +167,17 @@ export async function quoteCart(slugs,email,ref,ck,opt={}){
   items:prods.map((p,i)=>({slug:p.slug,title:p.title,cat:p.cat,thumb:p.cover?'/api/cover?slug='+p.slug:(p.img?'/covers/'+p.img:''),emoji:p.emoji||'📘',color:p.color||'#3b82f6',price:qs[i].price,pay:qs[i].pay,tag:qs[i].tag})),
   regular:cur==='INR'?prods.reduce((a,p)=>a+p.price,0):r2(qs.reduce((a,q)=>a+q.price,0)),
   total:Math.max(cur==='INR'?1:0.5,totalCur),total_inr:Math.max(1,totalInr-credit),credit,cr:crc,ref:qs[0].ref};
+}
+
+// A section bundle: one fixed price (set in the admin page) for ALL PDFs of a section, for a limited time.
+export async function bundleOffer(id,country,cur){
+ const bl=(await store().get('adm/bundles',{type:'json'}))||[],b=bl.find(x=>x.id===id);
+ if(!bundleLive(b))return {error:'This bundle offer is not available right now.'};
+ const cat=await catalog(),items=Object.entries(cat).filter(([k,p])=>p.cat===b.cat&&p.pdf);
+ if(!items.length)return {error:'There are no PDFs in this bundle yet.'};
+ const want=currencyFor(country,cur);let c='INR';
+ if(want!=='INR'&&b.prices){if(b.prices[want]>0)c=want;else if(b.prices.USD>0)c='USD';}
+ const price=c==='INR'?b.price:b.prices[c];
+ const worth=items.every(([k,p])=>c==='INR'||(p.prices||{})[c]>0)?r2(items.reduce((a,[k,p])=>a+(c==='INR'?p.price:p.prices[c]),0)):null;
+ return {b,items,slugs:items.map(x=>x[0]),currency:c,price,worth,inr:b.price};
 }

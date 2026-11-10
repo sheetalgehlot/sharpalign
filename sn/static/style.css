@@ -158,3 +158,10 @@ details{border-top:1px solid var(--ln);padding:10px 0}details:first-of-type{bord
 .line{display:flex;gap:12px;align-items:center;justify-content:space-between;border-bottom:1px solid var(--ln);padding:10px 0}
 .x{background:transparent;color:var(--ink);border:1.5px solid var(--ln);border-radius:8px;padding:6px 12px;cursor:pointer}
 .lb tr.on td{background:var(--ac);color:#fff;font-weight:700}
+/* section bundle popup */
+.bpop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:70;display:grid;place-items:center;padding:14px}
+.bbox{background:var(--sf);color:var(--ink);border-radius:16px;max-width:420px;width:100%;padding:18px;position:relative;max-height:92vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.bx{position:absolute;top:8px;right:10px;background:none;border:0;font-size:24px;color:var(--mu);cursor:pointer}
+.bthumbs{display:flex;gap:8px;justify-content:center;margin-bottom:10px}.bthumbs img{height:90px;border-radius:6px;box-shadow:0 3px 8px rgba(0,0,0,.25)}
+.bbox h3{font-size:26px;margin-right:24px}.bprice{font:800 34px var(--hd);margin:4px 0}.bprice s{font-size:.55em;opacity:.6}
+.bchip{position:fixed;left:10px;bottom:10px;z-index:45;background:var(--bt);color:var(--bi);border:0;border-radius:99px;padding:10px 14px;font:700 14px var(--body);box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:pointer}

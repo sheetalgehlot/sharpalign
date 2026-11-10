@@ -4,5 +4,5 @@ export default async req=>{
  const items=r?(r.slugs||[r.slug]).filter(x=>cat[x]).map(x=>({slug:x,title:cat[x].title})):[];
  if(!items.length)return json({error:'expired'},404);
  const code=rcode(r.email),rr=(await getRef(code))||{};
- return json({title:items.map(i=>i.title).join(', '),items,code,key:rkey(code),days:CFG.link_days,fd:CFG.friend_discount_pct,cm:CFG.ref_commission_pct,...prog(rr)});
+ return json({title:items.length>3?items.length+' PDFs':items.map(i=>i.title).join(', '),bundle:r.bundle||'',items,code,key:rkey(code),days:CFG.link_days,fd:CFG.friend_discount_pct,cm:CFG.ref_commission_pct,...prog(rr)});
 };

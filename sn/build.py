@@ -2,13 +2,18 @@
 """Builds the static website into dist/ from products.json. Netlify runs this on every deploy."""
 import json, os, shutil, html, datetime
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
-CFG = json.load(open('config.json', encoding='utf-8')); SITE = CFG['site'].rstrip('/')
+CFG = json.load(open('config.json', encoding='utf-8')); CFG['site'] = os.environ.get('SITE_URL') or CFG['site']
+CFG['owner_email'] = os.environ.get('OWNER_EMAIL') or CFG['owner_email']
+if 'sharpalign.com' in CFG['site'] or not CFG['site']: CFG['site'] = 'https://sharpalign.shop'  # the placeholder is not a real domain
+if CFG['owner_email'].endswith('@sharpalign.com'): print('WARNING: owner_email is still the placeholder. Set OWNER_EMAIL in Netlify or owner_email in config.json.')
+SITE = CFG['site'].rstrip('/')
 E = lambda s: html.escape(str(s), quote=True)
 INR = lambda n: '₹{:,}'.format(int(n))
 load = lambda f, d: json.load(open(f, encoding='utf-8')) if os.path.isfile(f) else d
 CAMP = load('campaign.json', {'enabled': False})
 BUNDLE = load('bundle.json', {'enabled': False, 'tiers': [], 'max_items': 10})
 BUNDLE['tiers'] = sorted(BUNDLE.get('tiers', []), key=lambda t: t['items'])
+BUNDLE['enabled'] = bool(BUNDLE.get('multi_discount'))  # percent-off tiers stay OFF unless bundle.json says "multi_discount": true
 import re as _re
 ADMIN_PATH = str(load('admin.json', {'path': 'admin'}).get('path', 'admin')).strip('/ ')
 if not _re.fullmatch(r'[a-z0-9-]{4,40}', ADMIN_PATH): raise SystemExit('admin.json: "path" must be 4-40 lowercase letters, numbers or dashes')

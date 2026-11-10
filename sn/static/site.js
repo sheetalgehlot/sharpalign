@@ -87,6 +87,37 @@ prodP.then(d=>{const f=(d.flags||{})[bslug];if(!f)return;
  if(gal&&f.gallery&&f.gallery.length&&!gal.innerHTML.trim())gal.innerHTML=f.gallery.map((n,i)=>'<img src="/api/img?slug='+bslug+'&n='+n+'" alt="'+esc(t0+': inside page '+(i+1))+'" loading="lazy">').join('');
  if(ins&&gal&&gal.innerHTML.trim())ins.hidden=false});
 document.addEventListener('click',e=>{const im=e.target.closest&&e.target.closest('.gal img');if(!im)return;const o=document.createElement('div');o.className='lbx';o.innerHTML='<img src="'+im.src+'" alt="'+esc(im.alt)+'"><span>✕</span>';o.onclick=()=>o.remove();document.body.appendChild(o)});
+// ---- section bundle popup (price and timer are set in the admin page) ----
+(async()=>{
+ if(/^\/(thank-you|credit|cart)\//.test(location.pathname))return;
+ let d;try{d=await (await fetch('/api/bundles?cur='+g('sa_cur'))).json()}catch(e){return}
+ const list=(d.items||[]).filter(x=>!g('sa_bdbuy_'+x.id)&&(!x.ends||x.ends>Date.now()));
+ if(!list.length)return;
+ list.sort((x,y)=>((y.cat===cat)-(x.cat===cat))||((x.ends||9e15)-(y.ends||9e15)));
+ const b=list[0],m=v=>money(v,b.currency);
+ const html='<div class="bbox"><button class="bx" type="button" aria-label="Close">✕</button>'+(b.thumbs.length?'<div class="bthumbs">'+b.thumbs.map(u=>'<img src="'+esc(u)+'" alt="">').join('')+'</div>':'')
+  +'<h3>'+esc(b.title)+'</h3><p>'+esc(b.text||('Get all '+b.count+' '+b.catName+' PDFs together'))+'</p>'
+  +'<p class="bprice">'+(b.worth&&b.worth>b.price?'<s>'+m(b.worth)+'</s> ':'')+m(b.price)+'</p>'
+  +'<p class="note">Includes '+b.count+' PDF'+(b.count>1?'s':'')+': '+b.titles.map(esc).join(', ')+(b.count>b.titles.length?' and '+(b.count-b.titles.length)+' more':'')+'</p>'
+  +(b.ends?'<p class="offer">⏳ Offer ends in <b class="sa-t" data-to="'+b.ends+'"></b></p>':'')
+  +'<input type="email" id="bem" placeholder="Your email for the download links" autocomplete="email" value="'+esc(g('sa_email'))+'"><button class="cta" id="bpay" type="button">Get all '+b.count+' PDFs · '+m(b.price)+'</button><p class="note" id="bmsg" role="status"></p></div>';
+ let pop=null;const chip=document.createElement('button');chip.className='bchip';chip.type='button';chip.textContent='🎁 '+b.catName+' bundle '+m(b.price);
+ const tick=()=>document.querySelectorAll('.sa-t[data-to]').forEach(e=>e.textContent=T(+e.dataset.to));
+ const close=()=>{if(pop){pop.remove();pop=null}s('sa_bdx_'+b.id,String(Date.now()));if(!chip.isConnected)document.body.appendChild(chip)};
+ const open=()=>{if(pop)return;chip.remove();pop=document.createElement('div');pop.className='bpop';pop.setAttribute('role','dialog');pop.innerHTML=html;document.body.appendChild(pop);
+  pop.onclick=e=>{if(e.target===pop)close()};pop.querySelector('.bx').onclick=close;tick();
+  pop.querySelector('#bpay').onclick=async()=>{const email=pop.querySelector('#bem').value.trim(),msg=pop.querySelector('#bmsg'),btn=pop.querySelector('#bpay');
+   if(!/^\S+@\S+\.\S+$/.test(email)){msg.textContent='Enter a valid email so we can send your PDFs.';return}
+   s('sa_email',email);btn.disabled=true;msg.textContent='Opening secure payment...';
+   try{const o=await (await fetch('/api/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bundle:b.id,email,ref:g('sa_ref'),ck:g('sa_ck'),cur:g('sa_cur')})})).json();
+    if(!o.order_id)throw new Error(o.error||'Could not start payment.');
+    if(!window.Razorpay)await new Promise((res,rej)=>{const sc=document.createElement('script');sc.src='https://checkout.razorpay.com/v1/checkout.js';sc.onload=res;sc.onerror=rej;document.head.appendChild(sc)});
+    new Razorpay({key:o.key,amount:o.amount,currency:o.currency||'INR',order_id:o.order_id,name:'Sharpalign',description:o.title,prefill:{email},callback_url:o.callback,redirect:true,modal:{ondismiss:()=>{btn.disabled=false;msg.textContent=''}}}).open();
+   }catch(err){msg.textContent=err.message;btn.disabled=false}}};
+ chip.onclick=open;
+ setInterval(()=>{tick();if(b.ends&&Date.now()>=b.ends){if(pop)pop.remove();chip.remove()}},1000);
+ if(Date.now()-(+g('sa_bdx_'+b.id)||0)<8*36e5)document.body.appendChild(chip);else setTimeout(open,3500);
+})();
 document.addEventListener('submit',async e=>{const w=e.target.closest('.wl');if(!w)return;e.preventDefault();const m=w.querySelector('.wm'),b=w.querySelector('button');b.disabled=true;m.textContent='Saving…';
  try{const x=await (await fetch('/api/waitlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:w.querySelector('input[type=email]').value,cat:w.dataset.cat,website:w.querySelector('.hp').value})})).json();
  if(x.ok)w.innerHTML='<p><b>You are on the list ✓</b> We will email you when it opens.</p>';else{m.textContent=x.error||'Could not save. Please try again.';b.disabled=false}}catch(y){m.textContent='Could not save. Please try again.';b.disabled=false}});
