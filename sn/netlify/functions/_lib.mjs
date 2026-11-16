@@ -22,7 +22,7 @@ export async function catalog(){
  const [ap,pd,cv,rm,sm,gl]=await Promise.all([g('adm/products',[]),g('adm/pdfs',{}),g('adm/covers',{}),g('adm/removed',[]),g('adm/samples',{}),g('adm/gallery',{})]);
  const out={};
  for(const [k,v] of Object.entries(P)){if(rm.includes(k))continue;out[k]={...v,pdf:!!(v.pdf||pd[k]),cover:!!cv[k],source:'file',pdfmeta:pd[k]||null,sample:!!sm[k],gallery:gl[k]||[]};}
- for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,prices:p.prices||{},img:old&&old.img,cat:p.cat,short:p.short,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin',pdfmeta:pd[p.slug]||null,sample:!!sm[p.slug],gallery:gl[p.slug]||[]};}
+ for(const p of ap){const old=P[p.slug];out[p.slug]={title:p.title,price:p.price,prices:p.prices||{},img:old&&old.img,cat:p.cat,short:p.short,demo:p.demo,emoji:p.emoji,color:p.color,added:p.added,pdf:!!(pd[p.slug]||(old&&old.pdf)),cover:!!cv[p.slug],rec:p,source:'admin',pdfmeta:pd[p.slug]||null,sample:!!sm[p.slug],gallery:gl[p.slug]||[]};}
  CATC=out;CATT=Date.now();return out;}
 export const productA=async s=>{const c=await catalog();return Object.hasOwn(c,s)?c[s]:null;};
 export async function reviewsFor(slug){const s=store(),out=[];for(const b of (await s.list({prefix:'rv/'})).blobs){const r=await s.get(b.key,{type:'json'});if(r&&r.status==='approved'&&(!slug||r.slug===slug))out.push({slug:r.slug,name:r.name,rating:r.rating,text:r.text,date:r.date,verified:!!r.verified});}return out;}
@@ -39,6 +39,7 @@ export const getRef=async c=>/^[A-F0-9]{8}$/.test(c||'')?store().get('ref/'+c,{t
 export const balance=r=>{const n=Date.now();let b=0,p=0;for(const x of r.ledger){if(x.type==='earn'){if(x.avail<=n)b+=x.amt;else p+=x.amt;}else if(x.type==='spend')b-=x.amt;else b+=x.amt;}return [b,p];};
 export const CP=CFG.campaign||{};
 export const BD=CFG.bundle||{enabled:false,tiers:[],max_items:10};
+export const nounOf=c=>c==='websites'?{one:'website template',pl:'website templates'}:{one:'PDF',pl:'PDFs'};
 export const bundleLive=(b,n=Date.now())=>!!b&&b.active!==false&&(!b.starts||n>=b.starts)&&(!b.ends||n<b.ends);
 // bundle: the more PDFs in one order, the lower the percentage of the price you pay for each
 export const bundlePct=n=>{let p=100;if(BD.enabled)for(const t of BD.tiers||[])if(n>=t.items)p=t.pct;return p;};
@@ -114,14 +115,14 @@ export async function fulfil(oid,origin){
  let slugs=[n.slug];if(n.cid){const c=await store().get('cart/'+n.cid,{type:'json'});if(c&&Array.isArray(c.slugs))slugs=c.slugs;}
  slugs=slugs.filter(x=>x&&Object.hasOwn(cat,x));
  if(!slugs.length||!em)return null;
- n.slugs=slugs;n.slug=slugs[0];const p={title:slugs.map(x=>cat[x].title).join(', ')};
+ n.slugs=slugs;n.slug=slugs[0];const p={title:slugs.map(x=>cat[x].title).join(', ')},nn=nounOf(cat[slugs[0]].cat);
  const tok=mkToken(oid,n.slug,(o.created_at||0)*1000),s=store(),k='order/'+oid;
  if(await s.get(k,{type:'json'}))return tok;
  const w=await s.setJSON(k,{slug:slugs[0],slugs,bundle:n.bundle||'',email:em,t:Date.now(),dl:0,dls:{}},{onlyIfNew:true});
  if(w&&w.modified===false)return tok;
  await ledger(oid,em,o,n,origin);
  const code=rcode(em),rec=await getRef(code),fl=rec&&rec.founder?`\n\n🏅 You are Founding Customer #${rec.founder}: ${CP.perks.discount_pct}% off any PDF, early access to new launches and free updates to every PDF you buy (see My Library on your private page).`:'';
- await mail(em,(slugs.length>3?'Your '+slugs.length+' PDFs from Sharpalign':(slugs.length>1?'Your PDFs: ':'Your PDF: ')+p.title),`Thank you for your purchase!\n\nDownload ${slugs.length>1?'these '+slugs.length+' PDFs':'"'+p.title+'"'} here:\n${origin}/thank-you/?t=${tok}${slugs.length>1?'\n\nIncluded:\n'+slugs.map(x=>'- '+cat[x].title).join('\n'):''}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
+ await mail(em,(slugs.length>3?'Your '+slugs.length+' '+nn.pl+' from Sharpalign':(slugs.length>1?'Your '+nn.pl+': ':'Your '+nn.one+': ')+p.title),`Thank you for your purchase!\n\nDownload ${slugs.length>1?'these '+slugs.length+' '+nn.pl:'"'+p.title+'"'} here:\n${origin}/thank-you/?t=${tok}${slugs.length>1?'\n\nIncluded:\n'+slugs.map(x=>'- '+cat[x].title).join('\n'):''}\n\nThe link works for ${CFG.link_days} days. Need help? Just reply to this email.${fl}\n\nShare Sharpalign and earn store credit: friends get ${CFG.friend_discount_pct}% off their first PDF and you earn ${CFG.ref_commission_pct}% of what they pay.\nYour share link: ${origin}/?ref=${code}\nYour credit page (keep private): ${origin}/credit/#${rkey(code)}\n\nSharpalign`);
  await mail(CFG.owner_email,'New sale: '+p.title,`${em} bought ${p.title} for ${o.currency||'INR'} ${((o.amount_paid||0)/100).toFixed(2)}.\nOrder: ${oid}`);
  return tok;}
 // ---- admin ----
@@ -136,13 +137,16 @@ export async function passOkAsync(p){const saved=await store().get('adm/pw',{typ
 
 // Sends a PDF to the browser (from the admin upload, or from the files bundled with the site).
 export async function servePdf(slug,s,count,inline,kind='pdf'){
- const H=len=>({'content-type':'application/pdf','content-disposition':`${inline?'inline':'attachment'}; filename="${slug}${kind==='sample'?'-sample':''}.pdf"`,'content-length':String(len),'x-robots-tag':'noindex','cache-control':'private, no-store'});
+ let ext='pdf';const H=len=>({'content-type':ext==='zip'?'application/zip':'application/pdf','content-disposition':`${inline&&ext!=='zip'?'inline':'attachment'}; filename="${slug}${kind==='sample'?'-sample':''}.${ext}"`,'content-length':String(len),'x-robots-tag':'noindex','cache-control':'private, no-store'});
  const m=((await s.get(kind==='sample'?'adm/samples':'adm/pdfs',{type:'json'}))||{})[slug];
+ if(m&&m.ext==='zip')ext='zip';
  if(m){await count();let i=0;
   return new Response(new ReadableStream({async pull(c){if(i>=m.parts){c.close();return;}const b=await s.get(`${kind==='sample'?'sample':'pdf'}/${slug}/${i++}`,{type:'arrayBuffer'});if(!b){c.error(new Error('missing part'));return;}c.enqueue(new Uint8Array(b));}}),{headers:H(m.size)});}
  if(kind==='sample')return new Response('No sample for this PDF yet.',{status:404});
- const file=slug+'.pdf',here=path.dirname(new URL(import.meta.url).pathname);
- const f=[path.join(process.env.LAMBDA_TASK_ROOT||'/var/task','private-pdfs',file),path.join(process.cwd(),'private-pdfs',file),path.join(here,'../../private-pdfs',file)].find(existsSync);
+ const here=path.dirname(new URL(import.meta.url).pathname),cands=[];
+ for(const e of ['pdf','zip'])for(const base of [path.join(process.env.LAMBDA_TASK_ROOT||'/var/task','private-pdfs'),path.join(process.cwd(),'private-pdfs'),path.join(here,'../../private-pdfs')])cands.push(path.join(base,slug+'.'+e));
+ const f=cands.find(existsSync);
+ if(f&&f.endsWith('.zip'))ext='zip';
  if(!f)return new Response('File not found. Please contact us.',{status:404});
  await count();
  return new Response(Readable.toWeb(createReadStream(f)),{headers:H(statSync(f).size)});
@@ -174,7 +178,7 @@ export async function bundleOffer(id,country,cur){
  const bl=(await store().get('adm/bundles',{type:'json'}))||[],b=bl.find(x=>x.id===id);
  if(!bundleLive(b))return {error:'This bundle offer is not available right now.'};
  const cat=await catalog(),items=Object.entries(cat).filter(([k,p])=>p.cat===b.cat&&p.pdf);
- if(!items.length)return {error:'There are no PDFs in this bundle yet.'};
+ if(!items.length)return {error:'There is nothing in this bundle yet.'};
  const want=currencyFor(country,cur);let c='INR';
  if(want!=='INR'&&b.prices){if(b.prices[want]>0)c=want;else if(b.prices.USD>0)c='USD';}
  const price=c==='INR'?b.price:b.prices[c];

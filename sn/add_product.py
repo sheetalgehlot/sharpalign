@@ -8,11 +8,11 @@ a = argparse.ArgumentParser()
 for k in ('title', 'cat', 'price', 'pdf', 'short', 'desc'): a.add_argument('--' + k, required=True)
 a.add_argument('--cover'); a.add_argument('--pages', type=int, default=0); a.add_argument('--emoji', default='📘'); a.add_argument('--color', default='#3b82f6')
 x = a.parse_args()
-assert x.cat in ('kids', 'cooking', 'journals', 'novels', 'trading'), 'cat must be kids, cooking, journals, novels or trading'
+assert x.cat in ('kids', 'cooking', 'journals', 'novels', 'trading', 'websites'), 'cat must be kids, cooking, journals, novels, trading or websites'
 slug = re.sub(r'[^a-z0-9]+', '-', x.title.lower()).strip('-')
 P = json.load(open('products.json', encoding='utf-8'))
 assert not any(p['slug'] == slug for p in P), 'A product with this title already exists'
-os.makedirs('private-pdfs', exist_ok=True); shutil.copy(x.pdf, 'private-pdfs/%s.pdf' % slug)
+os.makedirs('private-pdfs', exist_ok=True); shutil.copy(x.pdf, 'private-pdfs/%s%s' % (slug, '.zip' if x.pdf.lower().endswith('.zip') else '.pdf'))
 if x.cover:
     ext = os.path.splitext(x.cover)[1].lower(); assert ext in ('.jpg', '.jpeg', '.png', '.webp'), 'cover must be jpg, png or webp'
     os.makedirs('covers', exist_ok=True); shutil.copy(x.cover, 'covers/%s%s' % (slug, ext))

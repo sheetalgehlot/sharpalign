@@ -1,5 +1,5 @@
 import {randomBytes} from 'node:crypto';
-import {json,quote,quoteCart,bundleOffer,getRef,rcode,isBuyer,rzp,env,productA,store} from './_lib.mjs';
+import {json,quote,quoteCart,bundleOffer,nounOf,getRef,rcode,isBuyer,rzp,env,productA,store} from './_lib.mjs';
 export default async (req,context)=>{
  if(req.method!=='POST')return json({error:'POST only'},405);
  const b=await req.json().catch(()=>({})),email=String(b.email||'').trim();
@@ -23,8 +23,8 @@ export default async (req,context)=>{
   amount=Math.round(c.total*100);currency=c.currency;title=c.items.length+' PDFs (bundle)';
  }else{
   first=list.length?list[0]:String(b.slug||'');const p=await productA(first);
-  if(!p)return json({error:'This PDF was not found.'},404);
-  if(!p.pdf)return json({error:'This PDF is not available yet.'},409);
+  if(!p)return json({error:'This item was not found.'},404);
+  if(!p.pdf)return json({error:'This '+nounOf(p.cat).one+' is not available yet.'},409);
   const q=await quote(p,email,String(b.ref||''),String(b.ck||''),opt);
   if(q.locked)return json({error:'This launch has not opened yet. Join the notify list on the page.'},409);
   notes={slug:first,email,cur:q.currency,inr:String(q.pay_inr)};if(q.ref)notes.ref=q.ref;if(q.credit>0){notes.cr=q.cr;notes.credit=String(q.credit);}

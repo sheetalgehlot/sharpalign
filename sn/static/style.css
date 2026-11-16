@@ -165,3 +165,19 @@ details{border-top:1px solid var(--ln);padding:10px 0}details:first-of-type{bord
 .bthumbs{display:flex;gap:8px;justify-content:center;margin-bottom:10px}.bthumbs img{height:90px;border-radius:6px;box-shadow:0 3px 8px rgba(0,0,0,.25)}
 .bbox h3{font-size:26px;margin-right:24px}.bprice{font:800 34px var(--hd);margin:4px 0}.bprice s{font-size:.55em;opacity:.6}
 .bchip{position:fixed;left:10px;bottom:10px;z-index:45;background:var(--bt);color:var(--bi);border:0;border-radius:99px;padding:10px 14px;font:700 14px var(--body);box-shadow:0 4px 14px rgba(0,0,0,.3);cursor:pointer}
+/* websites section */
+.t-websites{--bg:#0b1220;--sf:#131c31;--ink:#e6edf7;--mu:#93a4bf;--ln:#26324d;--ac:#38bdf8;--bt:#38bdf8;--bi:#06223a;--hd:"Space Grotesk",sans-serif;--body:"Nunito",sans-serif;color-scheme:dark}
+.t-websites .hero{background:radial-gradient(circle at 85% 0,#16406b,#0b1220 62%)}
+.t-websites .hero h1{font-weight:700;letter-spacing:-.03em}
+.browser{position:absolute;right:4%;bottom:14px;width:300px;border-radius:10px;overflow:hidden;background:#0f1a30;border:1px solid #2a3a5c;opacity:.9;box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.browser .bar2{display:flex;gap:6px;align-items:center;background:#1a2745;padding:8px 10px}
+.browser .bar2 i{width:9px;height:9px;border-radius:50%;background:#ff5f56}.browser .bar2 i:nth-child(2){background:#ffbd2e}.browser .bar2 i:nth-child(3){background:#27c93f}
+.browser .bar2 span{margin-left:8px;flex:1;background:#0f1a30;border-radius:5px;color:#7f93b5;font-size:12px;padding:2px 8px}
+.browser .bbody{padding:14px;display:grid;gap:8px}.browser .bbody b{display:block;height:10px;border-radius:5px;background:#26385e}.browser .bbody b.hd{height:26px;width:60%;background:#38bdf8}.browser .bbody b.half{width:55%}
+@media(max-width:759px){.browser{opacity:.22}}
+.t-websites .card{border-radius:8px;border-top:28px solid #1a2745}
+.t-websites .card::before{content:"";position:absolute;top:-19px;left:12px;width:9px;height:9px;border-radius:50%;background:#ff5f56;box-shadow:15px 0 #ffbd2e,30px 0 #27c93f}
+.t-websites .cv,.t-websites .cv.img{aspect-ratio:16/10;border-radius:6px}
+.t-websites .cv.big{max-width:none}.t-websites .prod{grid-template-columns:1fr}@media(min-width:760px){.t-websites .prod{grid-template-columns:1.25fr 1fr}}
+.t-websites .cta,.t-websites .buy{border-radius:6px}.t-websites .pr{color:var(--ac)}
+.tile.websites{background:#0b1220;color:#e6edf7;border:1px solid #38bdf8;border-radius:6px}
